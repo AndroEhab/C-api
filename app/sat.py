@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import math
 import re
 import threading
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol, Sequence, TypedDict
 
 SAT_MODEL_NAME = "sat-3l-sm"
 _MAX_SEGMENT_LENGTH = 5000
@@ -26,8 +27,22 @@ class SaTUnavailableError(RuntimeError):
     """Raised when the SaT model cannot be loaded or queried."""
 
 
+class BoundaryEvidence(TypedDict):
+    """Model evidence for one original subtitle cue boundary."""
+
+    leftIndex: int
+    rightIndex: int
+    characterOffset: int
+    boundaryProbability: float
+
+
 class SaTModel(Protocol):
     def split(self, text: str) -> Sequence[str]:
+        ...
+
+
+class SaTProbabilityModel(Protocol):
+    def predict_proba(self, text: str) -> Any:
         ...
 
 
@@ -82,9 +97,12 @@ def text_join_issue(left: str, right: str) -> str | None:
     return _contraction_attachment_issue(left, right)
 
 
-def join_segments(segments: Sequence[str]) -> str:
-    """Create a lossless display join while retaining every non-space character."""
+def _join_segments_with_boundary_offsets(
+    segments: Sequence[str],
+) -> tuple[str, list[int]]:
+    """Join fragments and retain SaT's raw character boundary indexes."""
     joined = ""
+    boundary_offsets: list[int] = []
     for segment in segments:
         if not isinstance(segment, str):
             raise ValueError("each segment must be text")
@@ -98,17 +116,103 @@ def join_segments(segments: Sequence[str]) -> str:
         )
         if not joined:
             joined = part
-        elif (
-            joined[-1].isspace()
-            or part[0] in _NO_SPACE_BEFORE
-            or _CLOSING_TAG_RE.match(part)
-            or joined[-1] in _NO_SPACE_AFTER
-            or contraction_is_safe
-        ):
-            joined += part
         else:
-            joined += f" {part}"
-    return joined
+            # wtpsplit assigns each character probability to the character
+            # ending a possible boundary, so this is the raw index before
+            # the next fragment starts in the joined model input.
+            boundary_offsets.append(len(joined) - 1)
+            if (
+                joined[-1].isspace()
+                or part[0] in _NO_SPACE_BEFORE
+                or _CLOSING_TAG_RE.match(part)
+                or joined[-1] in _NO_SPACE_AFTER
+                or contraction_is_safe
+            ):
+                joined += part
+            else:
+                joined += f" {part}"
+    return joined, boundary_offsets
+
+
+def join_segments(segments: Sequence[str]) -> str:
+    """Create a lossless display join while retaining every non-space character."""
+    return _join_segments_with_boundary_offsets(segments)[0]
+
+
+def _validate_segments(segments: Sequence[str]) -> None:
+    if not segments:
+        raise ValueError("at least one segment is required")
+    if any(not isinstance(segment, str) for segment in segments):
+        raise ValueError("each segment must be text")
+    if any(not segment.strip() for segment in segments):
+        raise ValueError("segments must contain non-empty text")
+    if any(len(segment.strip()) > _MAX_SEGMENT_LENGTH for segment in segments):
+        raise ValueError(f"each segment must be at most {_MAX_SEGMENT_LENGTH} characters")
+
+
+def _normalise_boundary_probabilities(
+    raw_probabilities: Any,
+    expected_count: int,
+) -> list[float]:
+    """Validate and flatten wtpsplit's per-character probability array."""
+    if isinstance(raw_probabilities, (str, bytes)):
+        raise ValueError("probabilities must be a numeric sequence")
+
+    tolist = getattr(raw_probabilities, "tolist", None)
+    try:
+        values = tolist() if callable(tolist) else list(raw_probabilities)
+    except Exception as exc:
+        raise ValueError("probabilities must be a numeric sequence") from exc
+
+    if not isinstance(values, (list, tuple)):
+        raise ValueError("probabilities must be a numeric sequence")
+    if len(values) != expected_count:
+        raise ValueError(
+            f"expected {expected_count} character probabilities, received {len(values)}"
+        )
+
+    probabilities: list[float] = []
+    for index, value in enumerate(values):
+        if isinstance(value, (str, bytes)):
+            raise ValueError(f"probability at index {index} is not numeric")
+        try:
+            row = list(value)
+        except TypeError:
+            scalar = value
+        else:
+            if len(row) != 1:
+                raise ValueError(
+                    f"probability at index {index} must contain exactly one value"
+                )
+            scalar = row[0]
+        if isinstance(scalar, (str, bytes, bool)):
+            raise ValueError(f"probability at index {index} is not numeric")
+        try:
+            probability = float(scalar)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"probability at index {index} is not numeric") from exc
+        if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
+            raise ValueError(
+                f"probability at index {index} must be within [0, 1]"
+            )
+        probabilities.append(probability)
+    return probabilities
+
+
+def _validate_boundary_offsets(
+    boundary_offsets: Sequence[int],
+    segment_count: int,
+    joined_text_length: int,
+) -> None:
+    expected_count = max(0, segment_count - 1)
+    if len(boundary_offsets) != expected_count:
+        raise ValueError(
+            f"expected {expected_count} boundary offsets, received {len(boundary_offsets)}"
+        )
+    if list(boundary_offsets) != sorted(set(boundary_offsets)):
+        raise ValueError("boundary offsets must be strictly increasing")
+    if any(offset < 0 or offset >= joined_text_length for offset in boundary_offsets):
+        raise ValueError("boundary offsets must point inside the joined text")
 
 
 class SaTSentenceReconstructor:
@@ -116,7 +220,7 @@ class SaTSentenceReconstructor:
 
     def __init__(
         self,
-        model: SaTModel | None = None,
+        model: SaTModel | SaTProbabilityModel | None = None,
         model_name: str = SAT_MODEL_NAME,
     ) -> None:
         self.model_name = model_name
@@ -127,7 +231,61 @@ class SaTSentenceReconstructor:
     def is_loaded(self) -> bool:
         return self._model is not None
 
-    def _get_model(self) -> SaTModel:
+    def score_boundaries(self, segments: Sequence[str]) -> list[BoundaryEvidence]:
+        """Return SaT's raw probability for every original cue boundary.
+
+        ``characterOffset`` is the zero-based index consumed by wtpsplit's
+        character probability vector. It identifies the last character of the
+        left segment; the boundary is immediately after that character.
+        """
+        _validate_segments(segments)
+        if len(segments) < 2:
+            return []
+
+        joined_text, boundary_offsets = _join_segments_with_boundary_offsets(segments)
+        _validate_boundary_offsets(
+            boundary_offsets,
+            segment_count=len(segments),
+            joined_text_length=len(joined_text),
+        )
+
+        model = self._get_model()
+        predict_proba = getattr(model, "predict_proba", None)
+        if not callable(predict_proba):
+            raise SaTUnavailableError(
+                "SaT raw boundary probability scoring is unavailable"
+            )
+
+        try:
+            raw_probabilities = predict_proba(joined_text)
+        except SaTUnavailableError:
+            raise
+        except Exception as exc:
+            raise SaTUnavailableError(
+                "Unable to score subtitle boundaries with SaT"
+            ) from exc
+
+        try:
+            probabilities = _normalise_boundary_probabilities(
+                raw_probabilities,
+                expected_count=len(joined_text),
+            )
+        except Exception as exc:
+            raise SaTUnavailableError(
+                f"Invalid SaT boundary probabilities: {exc}"
+            ) from exc
+
+        return [
+            {
+                "leftIndex": boundary_index,
+                "rightIndex": boundary_index + 1,
+                "characterOffset": character_offset,
+                "boundaryProbability": probabilities[character_offset],
+            }
+            for boundary_index, character_offset in enumerate(boundary_offsets)
+        ]
+
+    def _get_model(self) -> SaTModel | SaTProbabilityModel:
         if self._model is not None:
             return self._model
 
@@ -206,14 +364,7 @@ class SaTSentenceReconstructor:
 
 
     def reconstruct(self, segments: Sequence[str]) -> dict[str, Any]:
-        if not segments:
-            raise ValueError("at least one segment is required")
-        if any(not isinstance(segment, str) for segment in segments):
-            raise ValueError("each segment must be text")
-        if any(not segment.strip() for segment in segments):
-            raise ValueError("segments must contain non-empty text")
-        if any(len(segment.strip()) > _MAX_SEGMENT_LENGTH for segment in segments):
-            raise ValueError(f"each segment must be at most {_MAX_SEGMENT_LENGTH} characters")
+        _validate_segments(segments)
 
         joined_text = join_segments(segments)
 

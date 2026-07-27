@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import math
 from pathlib import Path
 import re
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Literal, Mapping, Protocol, Sequence, TypedDict
 
 from .sat import SaTSentenceReconstructor, join_segments, text_join_issue
 
@@ -18,6 +19,7 @@ _CUE_TIMING_RE = re.compile(
 )
 
 DEFAULT_MAX_MERGE_GAP_MS = 1_500
+MODEL_BOUNDARY_THRESHOLD = 0.5
 _LOGGER = logging.getLogger(__name__)
 _STRONG_SENTENCE_END_RE = re.compile(r"""[.!?…]+(?:["'’”»)\]}]+)?$""")
 _DIALOGUE_DASH_RE = re.compile(r"^\s*(?:--?|[–—]|>>)\s+")
@@ -56,80 +58,6 @@ _QUESTION_STARTS = frozenset(
         "why",
         "will",
         "would",
-    }
-)
-_QUESTION_AUXILIARIES = frozenset(
-    {
-        "am",
-        "are",
-        "can",
-        "could",
-        "did",
-        "do",
-        "does",
-        "had",
-        "has",
-        "have",
-        "is",
-        "may",
-        "must",
-        "should",
-        "was",
-        "were",
-        "will",
-        "would",
-    }
-)
-_CONTINUATION_STARTS = frozenset(
-    {
-        "and",
-        "as",
-        "because",
-        "but",
-        "could",
-        "for",
-        "from",
-        "if",
-        "is",
-        "nor",
-        "of",
-        "or",
-        "so",
-        "than",
-        "that",
-        "to",
-        "unless",
-        "until",
-        "when",
-        "where",
-        "which",
-        "while",
-        "who",
-        "whom",
-        "whose",
-        "with",
-        "without",
-        "would",
-        "yet",
-    }
-)
-_COMPLEMENT_ENDINGS = frozenset(
-    {
-        "about",
-        "as",
-        "at",
-        "by",
-        "for",
-        "from",
-        "in",
-        "into",
-        "of",
-        "on",
-        "onto",
-        "than",
-        "to",
-        "with",
-        "without",
     }
 )
 _RESPONSE_START_RE = re.compile(
@@ -187,36 +115,6 @@ def _likely_complete_clause(text: str) -> bool:
         or _looks_like_question(visible)
         or _FINITE_VERB_RE.search(visible) is not None
     )
-
-
-def _clear_continuation_boundary(left: str, right: str) -> bool:
-    left_words = _words(left)
-    right_words = _words(right)
-    if not left_words or not right_words:
-        return False
-
-    first = right_words[0].lower()
-    second = right_words[1].lower() if len(right_words) > 1 else ""
-    left_last = left_words[-1].lower()
-    first_letter = re.search(r"[A-Za-z]", _visible_text(right))
-    starts_lowercase = first_letter is not None and first_letter.group(0).islower()
-
-    if first == "than":
-        return True
-    if first in {"how", "what", "when", "where", "which", "who", "whom", "whose", "why"}:
-        if starts_lowercase or second not in _QUESTION_AUXILIARIES:
-            return True
-    if left_last in _COMPLEMENT_ENDINGS and (
-        starts_lowercase
-        or first in _CONTINUATION_STARTS
-        or first.endswith("ing")
-    ):
-        return True
-    if _ends_strong_sentence(left):
-        return False
-    if starts_lowercase or first in _CONTINUATION_STARTS:
-        return True
-    return not _likely_complete_clause(left) and first in _QUESTION_AUXILIARIES
 
 
 def _looks_like_answer(text: str) -> bool:
@@ -283,12 +181,34 @@ class ReconstructedSentence:
 
 
 class InvalidGroupingResponse(ValueError):
-    """Raised when the grouping API cannot be mapped to the original cues."""
+    """Raised when a model response cannot be mapped to the original cues."""
 
 
-class SegmentGroupingApi(Protocol):
-    def group(self, segments: Sequence[Mapping[str, str]]) -> Any:
-        """Group ordered segments and return groups containing segment IDs."""
+BoundaryDecisionValue = Literal["join", "break", "uncertain"]
+
+
+class BoundaryEvidence(TypedDict):
+    """Model evidence for one original subtitle cue boundary."""
+
+    leftSegmentId: str
+    rightSegmentId: str
+    modelProbability: float | None
+
+
+class BoundaryDecision(TypedDict):
+    """One independent decision for an original subtitle cue boundary."""
+
+    leftSegmentId: str
+    rightSegmentId: str
+    decision: BoundaryDecisionValue
+    reason: str
+    modelProbability: float | None
+    gapMs: int
+
+
+class BoundaryScoringApi(Protocol):
+    def score_boundaries(self, segments: Sequence[str]) -> Any:
+        """Return model evidence for every original cue boundary."""
 
 
 def _timestamp_to_ms(timestamp: str) -> int:
@@ -359,19 +279,6 @@ def _validate_segments(segments: Sequence[SubtitleSegment]) -> list[SubtitleSegm
     return result
 
 
-def _fallback_sentence(segment: SubtitleSegment) -> ReconstructedSentence:
-    part = ReconstructedSentencePart(
-        segment_id=segment.segment_id,
-        text=segment.text,
-        start_ms=segment.start_ms,
-        end_ms=segment.end_ms,
-    )
-    return ReconstructedSentence(
-        text=segment.text.strip(),
-        start_ms=segment.start_ms,
-        end_ms=segment.end_ms,
-        parts=[part],
-    )
 
 
 def _segment_ids_from_value(value: Any) -> list[str]:
@@ -478,167 +385,274 @@ def _parts_for_group(group: Sequence[str], by_id: Mapping[str, SubtitleSegment])
     ]
 
 
-def _merge_rejection_reason(
-    group: Sequence[str],
-    by_id: Mapping[str, SubtitleSegment],
+def _boundary_value(entry: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in entry:
+            return entry[key]
+    return None
+
+
+def _normalise_model_probability(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (bool, str, bytes)):
+        raise InvalidGroupingResponse("boundary model probability must be numeric")
+    try:
+        probability = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise InvalidGroupingResponse("boundary model probability must be numeric") from exc
+    if not math.isfinite(probability) or not 0.0 <= probability <= 1.0:
+        raise InvalidGroupingResponse("boundary model probability must be within [0, 1]")
+    return probability
+
+
+def _normalise_boundary_evidence(
+    response: Any,
+    segments: Sequence[SubtitleSegment],
+) -> list[BoundaryEvidence]:
+    if isinstance(response, Mapping):
+        for key in ("boundaries", "evidence", "scores"):
+            if key in response:
+                response = response[key]
+                break
+        else:
+            raise InvalidGroupingResponse("boundary response must contain evidence")
+    if not isinstance(response, Sequence) or isinstance(response, (str, bytes)):
+        raise InvalidGroupingResponse("boundary response must contain an array of evidence")
+
+    entries = list(response)
+    expected_count = max(0, len(segments) - 1)
+    if len(entries) != expected_count:
+        raise InvalidGroupingResponse(
+            f"expected {expected_count} boundary evidence items, received {len(entries)}"
+        )
+
+    evidence: list[BoundaryEvidence] = []
+    for boundary_index, entry in enumerate(entries):
+        left_segment_id = segments[boundary_index].segment_id
+        right_segment_id = segments[boundary_index + 1].segment_id
+        if isinstance(entry, Mapping):
+            supplied_left_id = _boundary_value(entry, "leftSegmentId", "left_segment_id")
+            supplied_right_id = _boundary_value(entry, "rightSegmentId", "right_segment_id")
+            if supplied_left_id is not None and supplied_left_id != left_segment_id:
+                raise InvalidGroupingResponse("boundary evidence changes cue order")
+            if supplied_right_id is not None and supplied_right_id != right_segment_id:
+                raise InvalidGroupingResponse("boundary evidence changes cue order")
+
+            supplied_left_index = _boundary_value(entry, "leftIndex", "left_index")
+            supplied_right_index = _boundary_value(entry, "rightIndex", "right_index")
+            if supplied_left_index is not None and supplied_left_index != boundary_index:
+                raise InvalidGroupingResponse("boundary evidence changes cue order")
+            if supplied_right_index is not None and supplied_right_index != boundary_index + 1:
+                raise InvalidGroupingResponse("boundary evidence changes cue order")
+            raw_probability = _boundary_value(
+                entry,
+                "modelProbability",
+                "model_probability",
+                "boundaryProbability",
+                "boundary_probability",
+                "probability",
+            )
+        else:
+            raw_probability = entry
+
+        try:
+            model_probability = _normalise_model_probability(raw_probability)
+        except InvalidGroupingResponse:
+            # Keep neighboring boundaries usable when one score is malformed.
+            model_probability = None
+        evidence.append(
+            {
+                "leftSegmentId": left_segment_id,
+                "rightSegmentId": right_segment_id,
+                "modelProbability": model_probability,
+            }
+        )
+    return evidence
+
+
+def _boundary_safety_reason(
+    left: SubtitleSegment,
+    right: SubtitleSegment,
     max_gap_ms: int,
 ) -> str | None:
-    if len(group) < 2:
-        return None
+    # Lexical checks may force a BREAK, but never override a model BREAK with JOIN.
+    gap_ms = right.start_ms - left.end_ms
+    if gap_ms > max_gap_ms:
+        return f"cue gap {gap_ms}ms exceeds maximum {max_gap_ms}ms"
+    if left.speaker != right.speaker and (left.speaker is not None or right.speaker is not None):
+        return "adjacent cues have different explicit speakers"
+    if _has_speaker_marker(right.text):
+        return "next cue has a dialogue or speaker marker"
 
-    for left_id, right_id in zip(group, group[1:]):
-        left = by_id[left_id]
-        right = by_id[right_id]
-        gap_ms = right.start_ms - left.end_ms
-        if gap_ms > max_gap_ms:
-            return f"cue gap {gap_ms}ms exceeds maximum {max_gap_ms}ms"
-        if left.speaker != right.speaker and (left.speaker is not None or right.speaker is not None):
-            return "adjacent cues have different explicit speakers"
-        if _has_speaker_marker(right.text):
-            return "next cue has a dialogue or speaker marker"
+    join_issue = text_join_issue(left.text, right.text)
+    if join_issue is not None:
+        return f"unsafe text boundary: {join_issue}"
+    if _looks_like_question(left.text) and _looks_like_answer(right.text):
+        return "question appears to be followed by an answer"
+    if (
+        _RESPONSE_START_RE.match(_visible_text(right.text)) is not None
+        and _likely_complete_clause(left.text)
+    ):
+        return "next cue looks like a conversational response"
+    if (
+        _likely_complete_clause(left.text)
+        and _likely_complete_clause(right.text)
+        and (
+            _starts_new_sentence(right.text)
+            or (_ends_strong_sentence(left.text) and _ends_strong_sentence(right.text))
+        )
+    ):
+        return "adjacent cues look like independently complete statements"
+    if _ends_strong_sentence(left.text) and _starts_new_sentence(right.text):
+        return "first cue ends a sentence and the next starts a new one"
 
-        join_issue = text_join_issue(left.text, right.text)
-        if join_issue is not None:
-            return f"unsafe text boundary: {join_issue}"
-
-        clear_continuation = _clear_continuation_boundary(left.text, right.text)
-        if (
-            _looks_like_question(left.text)
-            and _looks_like_answer(right.text)
-            and not clear_continuation
-        ):
-            return "question appears to be followed by an answer"
-        if (
-            _RESPONSE_START_RE.match(_visible_text(right.text)) is not None
-            and _likely_complete_clause(left.text)
-            and not clear_continuation
-        ):
-            return "next cue looks like a conversational response"
-        if (
-            _likely_complete_clause(left.text)
-            and _likely_complete_clause(right.text)
-            and (
-                _starts_new_sentence(right.text)
-                or (
-                    _ends_strong_sentence(left.text)
-                    and _ends_strong_sentence(right.text)
-                )
-            )
-            and not clear_continuation
-        ):
-            return "adjacent cues look like independently complete statements"
-        if (
-            _ends_strong_sentence(left.text)
-            and _starts_new_sentence(right.text)
-            and not clear_continuation
-        ):
-            return "first cue ends a sentence and the next starts a new one"
-
-    source_non_space = "".join(
-        re.sub(r"\s+", "", by_id[segment_id].text) for segment_id in group
-    )
-    joined = join_segments([by_id[segment_id].text for segment_id in group])
+    source_non_space = re.sub(r"\s+", "", left.text + right.text)
+    joined = join_segments([left.text, right.text])
     if re.sub(r"\s+", "", joined) != source_non_space:
         return "display join would lose or reorder source text"
     return None
 
 
 class SubtitleSentenceReconstructor:
-    """Add validated sentence context without replacing original subtitle cues."""
+    """Reconstruct sentences from independent decisions at cue boundaries."""
 
     def __init__(
         self,
-        grouping_api: SegmentGroupingApi | SaTSentenceReconstructor,
+        boundary_api: BoundaryScoringApi | SaTSentenceReconstructor,
         *,
         max_gap_ms: int = DEFAULT_MAX_MERGE_GAP_MS,
         debug: bool = False,
     ) -> None:
         if isinstance(max_gap_ms, bool) or not isinstance(max_gap_ms, int) or max_gap_ms < 0:
             raise ValueError("max_gap_ms must be a non-negative integer")
-        self.grouping_api = grouping_api
+        self.boundary_api = boundary_api
         self.max_gap_ms = max_gap_ms
         self.debug = debug
 
-    def _log_rejection(self, group: Sequence[str], reason: str) -> None:
-        if self.debug:
-            _LOGGER.debug("Rejected subtitle group %s: %s", list(group), reason)
-
-    def reconstruct(self, segments: Sequence[SubtitleSegment]) -> list[ReconstructedSentence]:
-        ordered = _validate_segments(segments)
-        sentences: list[ReconstructedSentence] = []
-        start = 0
-        while start < len(ordered):
-            end = start + 1
-            while end < len(ordered) and ordered[end].speaker == ordered[start].speaker:
-                end += 1
-            sentences.extend(self._reconstruct_run(ordered[start:end]))
-            start = end
-        return sentences
-
-    def reconstruct_timeline(self, segments: Sequence[SubtitleSegment]) -> "SubtitleTimeline":
-        ordered = _validate_segments(segments)
-        return SubtitleTimeline(segments=ordered, sentences=self.reconstruct(ordered))
-
-    def _validated_groups(
+    def _log_boundary_issue(
         self,
-        groups: Sequence[Sequence[str]],
-        by_id: Mapping[str, SubtitleSegment],
-    ) -> list[list[str]]:
-        safe_groups: list[list[str]] = []
-        blocked_boundaries: set[tuple[str, str]] = set()
-        for proposed_group in groups:
-            group = list(proposed_group)
-            reason = _merge_rejection_reason(group, by_id, self.max_gap_ms)
-            if reason is None:
-                safe_groups.append(group)
-                continue
-
-            self._log_rejection(group, reason)
-            blocked_boundaries.update(zip(group, group[1:]))
-            safe_groups.extend([[segment_id] for segment_id in group])
-
-        coalesced: list[list[str]] = []
-        for group in safe_groups:
-            if coalesced:
-                boundary = (coalesced[-1][-1], group[0])
-                if (
-                    boundary not in blocked_boundaries
-                    and _clear_continuation_boundary(
-                        by_id[boundary[0]].text,
-                        by_id[boundary[1]].text,
-                    )
-                ):
-                    candidate = [*coalesced[-1], *group]
-                    reason = _merge_rejection_reason(candidate, by_id, self.max_gap_ms)
-                    if reason is None:
-                        coalesced[-1] = candidate
-                        continue
-                    self._log_rejection(candidate, reason)
-            coalesced.append(group)
-        return coalesced
-
-    def _reconstruct_run(self, segments: Sequence[SubtitleSegment]) -> list[ReconstructedSentence]:
-        payload = [
-            {"segmentId": segment.segment_id, "text": segment.text}
-            for segment in segments
-        ]
-        try:
-            if hasattr(self.grouping_api, "group"):
-                response = self.grouping_api.group(payload)
-            else:
-                response = self.grouping_api.reconstruct(
-                    [segment.text for segment in segments]
-                )
-            groups = validate_grouping_response(response, segments)
-        except Exception as exc:
-            self._log_rejection(
-                [segment.segment_id for segment in segments],
-                f"invalid or unavailable grouping response ({type(exc).__name__}: {exc})",
+        left_segment_id: str,
+        right_segment_id: str,
+        reason: str,
+    ) -> None:
+        if self.debug:
+            _LOGGER.debug(
+                "Rejected subtitle boundary %s/%s: %s",
+                left_segment_id,
+                right_segment_id,
+                reason,
             )
-            return [_fallback_sentence(segment) for segment in segments]
 
-        by_id = {segment.segment_id: segment for segment in segments}
-        groups = self._validated_groups(groups, by_id)
+    def _score_boundary_evidence(
+        self,
+        segments: Sequence[SubtitleSegment],
+    ) -> tuple[list[BoundaryEvidence | None], str | None]:
+        boundary_count = max(0, len(segments) - 1)
+        if not boundary_count:
+            return [], None
+
+        score_boundaries = getattr(self.boundary_api, "score_boundaries", None)
+        if not callable(score_boundaries):
+            return (
+                [None] * boundary_count,
+                "boundary scoring is unavailable",
+            )
+
+        try:
+            response = score_boundaries([segment.text for segment in segments])
+            evidence = _normalise_boundary_evidence(response, segments)
+        except Exception as exc:
+            return (
+                [None] * boundary_count,
+                f"invalid or unavailable boundary evidence ({type(exc).__name__}: {exc})",
+            )
+        return evidence, None
+
+    def evaluate_boundaries(
+        self,
+        segments: Sequence[SubtitleSegment],
+    ) -> list[BoundaryDecision]:
+        """Return exactly one independent decision for every adjacent cue pair."""
+        ordered = _validate_segments(segments)
+        evidence, evidence_error = self._score_boundary_evidence(ordered)
+        decisions: list[BoundaryDecision] = []
+
+        for boundary_index, (left, right) in enumerate(zip(ordered, ordered[1:])):
+            current_evidence = evidence[boundary_index]
+            model_probability = (
+                current_evidence["modelProbability"] if current_evidence is not None else None
+            )
+            gap_ms = right.start_ms - left.end_ms
+            safety_reason = _boundary_safety_reason(left, right, self.max_gap_ms)
+            if safety_reason is not None:
+                decision: BoundaryDecisionValue = "break"
+                reason = safety_reason
+            elif current_evidence is None:
+                decision = "uncertain"
+                reason = evidence_error or "boundary model evidence is unavailable"
+            elif model_probability is None:
+                decision = "uncertain"
+                reason = "boundary model probability is unavailable"
+            elif model_probability < MODEL_BOUNDARY_THRESHOLD:
+                decision = "join"
+                reason = "model probability favors continuation"
+            elif model_probability > MODEL_BOUNDARY_THRESHOLD:
+                decision = "break"
+                reason = "model probability favors a sentence boundary"
+            else:
+                decision = "uncertain"
+                reason = "model probability is exactly ambiguous"
+
+            if decision != "join" and self.debug:
+                self._log_boundary_issue(left.segment_id, right.segment_id, reason)
+            decisions.append(
+                {
+                    "leftSegmentId": left.segment_id,
+                    "rightSegmentId": right.segment_id,
+                    "decision": decision,
+                    "reason": reason,
+                    "modelProbability": model_probability,
+                    "gapMs": gap_ms,
+                }
+            )
+        return decisions
+
+    def build_sentences(
+        self,
+        segments: Sequence[SubtitleSegment],
+        decisions: Sequence[BoundaryDecision],
+    ) -> list[ReconstructedSentence]:
+        """Build sentence groups using only JOIN decisions."""
+        ordered = _validate_segments(segments)
+        expected_count = max(0, len(ordered) - 1)
+        if len(decisions) != expected_count:
+            raise ValueError(
+                f"expected {expected_count} boundary decisions, received {len(decisions)}"
+            )
+
+        groups: list[list[str]] = [[ordered[0].segment_id]]
+        for boundary_index, decision in enumerate(decisions):
+            if not isinstance(decision, Mapping):
+                raise ValueError("boundary decisions must be objects")
+            left = ordered[boundary_index]
+            right = ordered[boundary_index + 1]
+            if (
+                decision.get("leftSegmentId") != left.segment_id
+                or decision.get("rightSegmentId") != right.segment_id
+            ):
+                raise ValueError("boundary decisions must retain cue order and IDs")
+            decision_value = decision.get("decision")
+            if decision_value not in {"join", "break", "uncertain"}:
+                raise ValueError("boundary decision must be join, break, or uncertain")
+
+            # UNCERTAIN is deliberately handled like BREAK.
+            if decision_value == "join":
+                groups[-1].append(right.segment_id)
+            else:
+                groups.append([right.segment_id])
+
+        by_id = {segment.segment_id: segment for segment in ordered}
         return [
             ReconstructedSentence(
                 text=join_segments([by_id[segment_id].text for segment_id in group]),
@@ -648,6 +662,16 @@ class SubtitleSentenceReconstructor:
             )
             for group in groups
         ]
+
+    def reconstruct(self, segments: Sequence[SubtitleSegment]) -> list[ReconstructedSentence]:
+        ordered = _validate_segments(segments)
+        return self.build_sentences(ordered, self.evaluate_boundaries(ordered))
+
+    def reconstruct_timeline(self, segments: Sequence[SubtitleSegment]) -> "SubtitleTimeline":
+        ordered = _validate_segments(segments)
+        return SubtitleTimeline(segments=ordered, sentences=self.reconstruct(ordered))
+
+
 
 
 def _groups_from_sentence_texts(

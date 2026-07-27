@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app, get_subtitle_service
-from app.sat import SaTSentenceReconstructor, join_segments
+from app.sat import join_segments
 from app.subtitles import (
     ReconstructedSentence,
     SubtitleSegment,
@@ -17,23 +17,54 @@ from app.subtitles import (
 
 
 @dataclass
+class FakeBoundaryApi:
+    probabilities: Any
+    calls: list[list[str]]
+
+    def score_boundaries(self, segments: Sequence[str]) -> Any:
+        self.calls.append(list(segments))
+        return self.probabilities
+
+
+@dataclass
 class FakeGroupingApi:
     groups: Any
     calls: list[list[Mapping[str, str]]]
+    score_calls: list[list[str]] | None = None
+
+    def __post_init__(self) -> None:
+        if self.score_calls is None:
+            self.score_calls = []
+
+    def score_boundaries(self, segments: Sequence[str]) -> Any:
+        assert self.score_calls is not None
+        self.score_calls.append(list(segments))
+        response = self.groups.get("groups") if isinstance(self.groups, Mapping) else self.groups
+        if not isinstance(response, Sequence) or isinstance(response, (str, bytes)):
+            return self.groups
+
+        probabilities: list[float] = []
+        source_count = 0
+        for group in response:
+            if isinstance(group, Mapping):
+                members = group.get(
+                    "segmentIndexes",
+                    group.get("segment_indexes", group.get("segmentIds", group.get("segment_ids"))),
+                )
+            else:
+                members = group
+            if not isinstance(members, Sequence) or isinstance(members, (str, bytes)) or not members:
+                return self.groups
+            probabilities.extend([0.0] * (len(members) - 1))
+            source_count += len(members)
+        if source_count != len(segments):
+            return self.groups
+        return probabilities
 
     def group(self, segments: Sequence[Mapping[str, str]]) -> Any:
         self.calls.append(list(segments))
         return self.groups
 
-
-class FakeSentenceModel:
-    def __init__(self, sentences: Sequence[str]) -> None:
-        self.sentences = sentences
-        self.calls: list[str] = []
-
-    def split(self, text: str) -> Sequence[str]:
-        self.calls.append(text)
-        return self.sentences
 
 
 def segment(segment_id: str, text: str, start: int, end: int, speaker: str | None = None) -> SubtitleSegment:
@@ -69,26 +100,19 @@ def test_one_sentence_across_segments_preserves_parts_and_active_timing() -> Non
     assert [part.segment_id for part in timeline.sentences[0].parts] == ["cue-1", "cue-2", "cue-3"]
     assert timeline.active_part_at(11_300).segment_id == "cue-2"
     assert timeline.active_sentence_at(12_600) is timeline.sentences[0]
-    assert [item["segmentId"] for item in api.calls[0]] == ["cue-1", "cue-2", "cue-3"]
-
-
-def test_cues_144_and_145_group_despite_an_earlier_boundary_inside_a_cue() -> None:
-    model = FakeSentenceModel(
-        [
-            "First.",
-            "Second.",
-            "This case could be a breakthrough.",
-        ]
-    )
+    assert api.calls == []
+    assert api.score_calls == [
+        ["I never thought", "that we would end up", "living here."]
+    ]
+def test_cues_are_decided_only_at_original_boundaries() -> None:
+    api = FakeBoundaryApi([0.9, 0.1], [])
     cues = [
         segment("143", "First. Second.", 1_109_040, 1_111_250),
         segment("144", "This case", 1_111_620, 1_112_620),
         segment("145", "could be a breakthrough.", 1_112_710, 1_114_790),
     ]
 
-    timeline = SubtitleSentenceReconstructor(
-        SaTSentenceReconstructor(model=model)
-    ).reconstruct_timeline(cues)
+    timeline = SubtitleSentenceReconstructor(api).reconstruct_timeline(cues)
 
     assert [sentence.segment_ids for sentence in timeline.sentences] == [
         ["143"],
@@ -105,6 +129,8 @@ def test_cues_144_and_145_group_despite_an_earlier_boundary_inside_a_cue() -> No
         ("144", "This case", 1_111_620, 1_112_620),
         ("145", "could be a breakthrough.", 1_112_710, 1_114_790),
     ]
+
+
 
 
 def test_multiple_sentences_in_one_segment_falls_back_without_losing_the_cue() -> None:
@@ -141,20 +167,21 @@ def test_different_speakers_are_never_grouped_together() -> None:
     sentences = SubtitleSentenceReconstructor(api).reconstruct(cues)
 
     assert [sentence.segment_ids for sentence in sentences] == [["a"], ["b"]]
-    assert [call[0]["segmentId"] for call in api.calls] == ["a", "b"]
+    assert api.calls == []
+    assert api.score_calls == [["Hello.", "Hello."]]
 
 
 @pytest.mark.parametrize(
     "response",
     [
-        {"groups": [["a", "unknown"]]},
-        {"groups": [["b"], ["a"]]},
-        {"groups": [["a"], ["a"]]},
-        {"groups": [["a"]]},
+        [],
+        {"boundaries": [0.2, 0.3]},
+        {"boundaries": [{"modelProbability": 2.0}]},
+        {"notEvidence": []},
     ],
 )
-def test_malformed_grouping_response_falls_back_to_original_cues(response: Any) -> None:
-    api = FakeGroupingApi(response, [])
+def test_malformed_boundary_evidence_falls_back_to_original_cues(response: Any) -> None:
+    api = FakeBoundaryApi(response, [])
     cues = [segment("a", "First", 0, 100), segment("b", "Second", 100, 200)]
 
     sentences = SubtitleSentenceReconstructor(api).reconstruct(cues)
@@ -247,7 +274,7 @@ def test_explicit_indexes_merge_clear_two_cue_continuation() -> None:
     assert sentence.segment_ids == ["144", "145"]
 
 
-def test_model_split_is_coalesced_for_clear_three_cue_continuation() -> None:
+def test_model_breaks_are_not_coalesced_into_other_cues() -> None:
     api = FakeGroupingApi({"groups": [["168"], ["169"], ["170"]]}, [])
     cues = [
         segment("168", "Police suspect a professional", 0, 1_000),
@@ -257,11 +284,11 @@ def test_model_split_is_coalesced_for_clear_three_cue_continuation() -> None:
 
     sentences = SubtitleSentenceReconstructor(api).reconstruct(cues)
 
-    assert len(sentences) == 1
-    assert sentences[0].text == (
-        "Police suspect a professional assassin organization is behind these murders."
-    )
-    assert sentences[0].segment_ids == ["168", "169", "170"]
+    assert [sentence.segment_ids for sentence in sentences] == [
+        ["168"],
+        ["169"],
+        ["170"],
+    ]
 
 
 def test_merge_across_thirty_seven_second_gap_is_rejected() -> None:
@@ -389,47 +416,30 @@ def test_api_timeout_keeps_original_cues() -> None:
     assert [sentence.segment_ids for sentence in sentences] == [["a"], ["b"]]
 
 
-def test_unpunctuated_first_cue_is_merged_when_continuation_is_clear() -> None:
-    api = FakeGroupingApi({"groups": [["a"], ["b"]]}, [])
+def test_model_break_is_not_overridden_by_lexical_continuation() -> None:
+    api = FakeBoundaryApi([0.9], [])
     cues = [
-        segment("a", "This case", 0, 500),
-        segment("b", "could be a breakthrough.", 520, 1_200),
+        segment("a", "I told you", 0, 500),
+        segment("b", "why this matters.", 520, 1_200),
     ]
 
-    sentences = SubtitleSentenceReconstructor(api).reconstruct(cues)
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
 
-    assert len(sentences) == 1
-    assert sentences[0].text == "This case could be a breakthrough."
-
-
+    assert decisions[0]["decision"] == "break"
+    assert decisions[0]["modelProbability"] == pytest.approx(0.9)
 @pytest.mark.parametrize(
-    ("texts", "expected"),
+    "texts",
     [
-        (
-            ["I'll tell you", "who your sister is."],
-            "I'll tell you who your sister is.",
-        ),
-        (
-            ["Better to die quick.", "Than live in pain."],
-            "Better to die quick. Than live in pain.",
-        ),
-        (
-            [
-                "They're also suspected of.",
-                "Colluding with local criminal gangs",
-                "to carry out targeted assassinations.",
-            ],
-            (
-                "They're also suspected of. Colluding with local criminal gangs "
-                "to carry out targeted assassinations."
-            ),
-        ),
+        ["I'll tell you", "who your sister is."],
+        ["Better to die quick.", "Than live in pain."],
+        [
+            "They're also suspected of.",
+            "Colluding with local criminal gangs",
+            "to carry out targeted assassinations.",
+        ],
     ],
 )
-def test_clear_continuations_override_unreliable_subtitle_punctuation(
-    texts: list[str],
-    expected: str,
-) -> None:
+def test_separate_model_breaks_remain_separate(texts: list[str]) -> None:
     ids = [str(index) for index in range(len(texts))]
     api = FakeGroupingApi({"groups": [[segment_id] for segment_id in ids]}, [])
     cues = [
@@ -439,9 +449,10 @@ def test_clear_continuations_override_unreliable_subtitle_punctuation(
 
     sentences = SubtitleSentenceReconstructor(api).reconstruct(cues)
 
-    assert len(sentences) == 1
-    assert sentences[0].text == expected
-    assert sentences[0].segment_ids == ids
+    assert [sentence.segment_ids for sentence in sentences] == [[segment_id] for segment_id in ids]
+    assert [sentence.text for sentence in sentences] == texts
+
+
 
 
 @pytest.mark.parametrize(
@@ -478,19 +489,69 @@ def test_configurable_gap_threshold_is_applied() -> None:
     assert [sentence.segment_ids for sentence in configured_groups] == [["a", "b"]]
 
 
-def test_rejected_group_is_atomic_and_later_groups_continue(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    api = FakeGroupingApi({"groups": [["a", "b"], ["c"], ["d"]]}, [])
+def test_rejected_boundary_does_not_destroy_valid_joins(caplog: pytest.LogCaptureFixture) -> None:
+    api = FakeBoundaryApi([0.1, 0.9, 0.1], [])
     cues = [
-        segment("a", "First statement.", 0, 500),
-        segment("b", "Second statement.", 520, 1_000),
-        segment("c", "This case", 1_020, 1_500),
-        segment("d", "could be a breakthrough.", 1_520, 2_000),
+        segment("a", "A", 0, 500),
+        segment("b", "B", 520, 1_000),
+        segment("c", "C", 1_020, 1_500),
+        segment("d", "D", 1_520, 2_000),
     ]
 
+    reconstructor = SubtitleSentenceReconstructor(api, debug=True)
     with caplog.at_level("DEBUG", logger="app.subtitles"):
-        sentences = SubtitleSentenceReconstructor(api, debug=True).reconstruct(cues)
+        decisions = reconstructor.evaluate_boundaries(cues)
+        sentences = reconstructor.build_sentences(cues, decisions)
 
-    assert [sentence.segment_ids for sentence in sentences] == [["a"], ["b"], ["c", "d"]]
-    assert "independently complete statements" in caplog.text
+    assert len(decisions) == 3
+    assert [
+        (item["leftSegmentId"], item["rightSegmentId"], item["decision"], item["gapMs"])
+        for item in decisions
+    ] == [
+        ("a", "b", "join", 20),
+        ("b", "c", "break", 20),
+        ("c", "d", "join", 20),
+    ]
+
+    assert [sentence.segment_ids for sentence in sentences] == [["a", "b"], ["c", "d"]]
+    assert "model probability favors a sentence boundary" in caplog.text
+
+
+def test_sentence_construction_treats_uncertain_as_break() -> None:
+    reconstructor = SubtitleSentenceReconstructor(FakeBoundaryApi([], []))
+    cues = [
+        segment("a", "A", 0, 500),
+        segment("b", "B", 520, 1_000),
+        segment("c", "C", 1_020, 1_500),
+        segment("d", "D", 1_520, 2_000),
+    ]
+    decisions = [
+        {
+            "leftSegmentId": "a",
+            "rightSegmentId": "b",
+            "decision": "join",
+            "reason": "test join",
+            "modelProbability": 0.1,
+            "gapMs": 20,
+        },
+        {
+            "leftSegmentId": "b",
+            "rightSegmentId": "c",
+            "decision": "uncertain",
+            "reason": "test uncertainty",
+            "modelProbability": None,
+            "gapMs": 20,
+        },
+        {
+            "leftSegmentId": "c",
+            "rightSegmentId": "d",
+            "decision": "join",
+            "reason": "test join",
+            "modelProbability": 0.1,
+            "gapMs": 20,
+        },
+    ]
+
+    sentences = reconstructor.build_sentences(cues, decisions)
+
+    assert [sentence.segment_ids for sentence in sentences] == [["a", "b"], ["c", "d"]]

@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app, get_sat_service
-from app.sat import SAT_MODEL_NAME, SaTSentenceReconstructor
+from app.sat import SAT_MODEL_NAME, SaTUnavailableError, SaTSentenceReconstructor
 
 
 class FakeSaTModel:
@@ -18,6 +18,19 @@ class FakeSaTModel:
         if "MULTI_SENTENCE" in text:
             return ["First detected sentence.", "Second detected sentence."]
         return [text]
+
+
+class FakeProbabilitySaTModel(FakeSaTModel):
+    def __init__(self, probabilities: Sequence[float] | Sequence[Sequence[float]] | None = None) -> None:
+        super().__init__()
+        self.probability_calls: list[str] = []
+        self._probabilities = probabilities
+
+    def predict_proba(self, text: str) -> Sequence[float] | Sequence[Sequence[float]]:
+        self.probability_calls.append(text)
+        if self._probabilities is not None:
+            return self._probabilities
+        return [[index / 100] for index in range(len(text))]
 
 
 class FailingSaTModel:
@@ -180,6 +193,68 @@ def test_sat_failure_returns_503() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Unable to segment text with SaT"}
+
+
+def test_score_boundaries_returns_one_ordered_score_per_original_boundary() -> None:
+    model = FakeProbabilitySaTModel()
+    service = SaTSentenceReconstructor(model=model)
+
+    evidence = service.score_boundaries(["one", "two", "three"])
+
+    assert model.probability_calls == ["one two three"]
+    assert evidence == [
+        {
+            "leftIndex": 0,
+            "rightIndex": 1,
+            "characterOffset": 2,
+            "boundaryProbability": 0.02,
+        },
+        {
+            "leftIndex": 1,
+            "rightIndex": 2,
+            "characterOffset": 6,
+            "boundaryProbability": 0.06,
+        },
+    ]
+    assert len(evidence) == 2
+    assert [item["leftIndex"] for item in evidence] == [0, 1]
+    assert [item["rightIndex"] for item in evidence] == [1, 2]
+    assert [item["characterOffset"] for item in evidence] == [2, 6]
+
+
+def test_score_boundaries_preserves_offsets_when_joining_without_punctuation_space() -> None:
+    model = FakeProbabilitySaTModel()
+    service = SaTSentenceReconstructor(model=model)
+
+    evidence = service.score_boundaries(["Hello", ", world", "again"])
+
+    assert model.probability_calls == ["Hello, world again"]
+    assert [item["characterOffset"] for item in evidence] == [4, 11]
+    assert [item["boundaryProbability"] for item in evidence] == [0.04, 0.11]
+
+
+def test_score_boundaries_rejects_wrong_probability_count() -> None:
+    service = SaTSentenceReconstructor(model=FakeProbabilitySaTModel([0.5]))
+
+    with pytest.raises(SaTUnavailableError, match="expected 7 character probabilities"):
+        service.score_boundaries(["one", "two"])
+
+
+@pytest.mark.parametrize("bad_probability", [-0.1, 1.1, float("nan"), float("inf")])
+def test_score_boundaries_rejects_probability_out_of_range(bad_probability: float) -> None:
+    service = SaTSentenceReconstructor(
+        model=FakeProbabilitySaTModel([bad_probability] * len("one two"))
+    )
+
+    with pytest.raises(SaTUnavailableError, match="within \\[0, 1\\]"):
+        service.score_boundaries(["one", "two"])
+
+
+def test_score_boundaries_fails_safely_without_raw_probability_support() -> None:
+    service = SaTSentenceReconstructor(model=FakeSaTModel())
+
+    with pytest.raises(SaTUnavailableError, match="raw boundary probability"):
+        service.score_boundaries(["one", "two"])
 
 
 def test_group_contract_returns_explicit_source_indexes_and_ids() -> None:
