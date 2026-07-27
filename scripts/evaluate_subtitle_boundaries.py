@@ -14,7 +14,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.sat import SaTSentenceReconstructor, join_segments  # noqa: E402
+from app.sat import (  # noqa: E402
+    SaTSentenceReconstructor,
+    WindowedScoringConfig,
+    _build_window_plan,
+    join_segments,
+)
 from app.subtitles import (  # noqa: E402
     SubtitleSegment,
     SubtitleSentenceReconstructor,
@@ -152,6 +157,17 @@ def _segments_for_case(case: Mapping[str, Any], index: int) -> tuple[list[Subtit
     return segments, left_id, right_id
 
 
+def _owning_window(
+    plan: list[dict[str, int]],
+    boundary_index: int,
+) -> dict[str, int] | None:
+    """Find the plan entry whose owned range includes ``boundary_index``."""
+    for entry in plan:
+        if entry["ownedStart"] <= boundary_index <= entry["ownedEnd"]:
+            return entry
+    return None
+
+
 def _evaluate_case(
     case: Mapping[str, Any],
     index: int,
@@ -159,6 +175,7 @@ def _evaluate_case(
     *,
     full_file_decisions: list[dict] | None = None,
     full_file_segments: list[SubtitleSegment] | None = None,
+    window_plan: list[dict[str, int]] | None = None,
 ) -> dict[str, Any]:
     left_cue_id = case.get("leftCueId")
     right_cue_id = case.get("rightCueId")
@@ -187,6 +204,30 @@ def _evaluate_case(
             "reason": decision["reason"],
             "correct": predicted == case["expected"],
         }
+
+        # Cross-validate: score the owning window directly and compare probability
+        if window_plan is not None and decision["modelProbability"] is not None:
+            owning = _owning_window(window_plan, boundary_index)
+            if owning is not None:
+                window_segments = full_file_segments[owning["windowStart"]:owning["windowEnd"]]
+                window_texts = [s.text for s in window_segments]
+                try:
+                    direct_evidence = reconstructor.boundary_api.score_boundaries(
+                        window_texts
+                    )
+                    local_offset = boundary_index - owning["windowStart"]
+                    if 0 <= local_offset < len(direct_evidence):
+                        window_prob = direct_evidence[local_offset].get("boundaryProbability")
+                        if window_prob is not None:
+                            result["windowCrossCheck"] = {
+                                "windowStart": owning["windowStart"],
+                                "windowEnd": owning["windowEnd"],
+                                "directProbability": window_prob,
+                                "matches": abs(window_prob - decision["modelProbability"]) < 1e-9,
+                            }
+                except Exception:
+                    pass  # cross-check is advisory; don't fail on it
+
         for field in OPTIONAL_REVIEW_KEYS & set(case):
             result[field] = case[field]
         return result
@@ -239,7 +280,6 @@ def classify_boundary(
         full_file_segments=full_file_segments,
     )["predicted"]
 
-
 def evaluate_fixture(
     cases: Sequence[Mapping[str, Any]],
     reconstructor: SubtitleSentenceReconstructor | None = None,
@@ -251,15 +291,25 @@ def evaluate_fixture(
     # Pre-compute full-file decisions for Murder Game cases
     full_file_decisions: list[dict] | None = None
     full_file_segments: list[SubtitleSegment] | None = None
+    window_plan: list[dict[str, int]] | None = None
     if source_srt_path is not None:
         full_file_segments = parse_srt_file(source_srt_path)
         full_file_decisions = _build_decisions_from_full_file(full_file_segments, current)
+        try:
+            sat_api = current.boundary_api
+            cfg = WindowedScoringConfig()
+            window_plan = _build_window_plan(len(full_file_segments), cfg)
+            from app.sat import _validate_window_plan
+            _validate_window_plan(window_plan, len(full_file_segments) - 1)
+        except Exception:
+            window_plan = None
 
     case_results = [
         _evaluate_case(
             case, index, current,
             full_file_decisions=full_file_decisions,
             full_file_segments=full_file_segments,
+            window_plan=window_plan,
         )
         for index, case in enumerate(cases, start=1)
     ]
@@ -293,9 +343,12 @@ def evaluate_fixture(
         cases[r["case"] - 1]["expected"] == "join" and r["predicted"] != "join"
         for r in labeled_results
     )
+    misclassified = [
+        r for r in case_results
+        if not r["correct"]
+        and cases[r["case"] - 1].get("expected") != "ambiguous"
+    ]
     total = len(case_results)
-    misclassified = [r for r in case_results if not r["correct"]]
-
     return {
         "metrics": {
             "totalBoundaries": total,

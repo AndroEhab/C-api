@@ -4,17 +4,18 @@
   "fixture": "benchmarks/subtitle_boundary_benchmark.json",
   "windowSrt": "Murder Game 2026 iQY WEB.srt",
   "metrics": {
-    "totalBoundaries": 61,
-    "cases": 61,
-    "expectedJoin": 27,
-    "expectedBreak": 34,
-    "predictedJoin": 20,
-    "trueJoin": 20,
-    "trueBreak": 34,
-    "joinPrecision": 1.0,
-    "joinRecall": 0.7407407407407407,
-    "breakAccuracy": 1.0,
-    "falseMergeCount": 0,
+    "totalBoundaries": 71,
+    "cases": 71,
+    "ambiguousCount": 2,
+    "expectedJoin": 31,
+    "expectedBreak": 38,
+    "predictedJoin": 30,
+    "trueJoin": 24,
+    "trueBreak": 32,
+    "joinPrecision": 0.8,
+    "joinRecall": 0.7741935483870968,
+    "breakAccuracy": 0.8421052631578947,
+    "falseMergeCount": 6,
     "falseNegativeCount": 7
   },
   "cases": [
@@ -158,9 +159,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.030559862032532692,
+      "modelProbability": 0.0014437558129429817,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 36,
+        "windowEnd": 84,
+        "directProbability": 0.0014437558129429817,
+        "matches": true
+      },
       "leftCueId": "75",
       "rightCueId": "76",
       "reviewCategory": "clear_no_punctuation"
@@ -173,9 +180,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.028328312560915947,
+      "modelProbability": 0.0002115288662025705,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.0002115288662025705,
+        "matches": true
+      },
       "leftCueId": "90",
       "rightCueId": "91",
       "reviewCategory": "clear_no_punctuation"
@@ -188,9 +201,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.027585282921791077,
+      "modelProbability": 0.01750955730676651,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.01750955730676651,
+        "matches": true
+      },
       "leftCueId": "92",
       "rightCueId": "93",
       "reviewCategory": "clear_no_punctuation"
@@ -200,15 +219,21 @@
       "left": "My sister puts things in fixed places",
       "right": "I know where they are by touch.",
       "gapMs": 160,
-      "expected": "join",
+      "expected": "ambiguous",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.3472050130367279,
+      "modelProbability": 0.005384938325732946,
       "reason": "model probability favors continuation",
-      "correct": true,
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.005384938325732946,
+        "matches": true
+      },
       "leftCueId": "97",
       "rightCueId": "98",
-      "reviewCategory": "clear_no_punctuation"
+      "reviewCategory": "ambiguous_join"
     },
     {
       "case": 16,
@@ -218,9 +243,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.007149102166295052,
+      "modelProbability": 0.00130450667347759,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.00130450667347759,
+        "matches": true
+      },
       "leftCueId": "103",
       "rightCueId": "104",
       "reviewCategory": "clear_no_punctuation"
@@ -233,9 +264,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 4.0063696360448375e-05,
+      "modelProbability": 6.643434062425513e-06,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 144,
+        "windowEnd": 192,
+        "directProbability": 6.643434062425513e-06,
+        "matches": true
+      },
       "leftCueId": "159",
       "rightCueId": "160",
       "reviewCategory": "clear_no_punctuation"
@@ -248,9 +285,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 6.402005965355784e-05,
+      "modelProbability": 4.601781256496906e-06,
       "reason": "continuation structure outweighs advisory punctuation, capitalization, and model boundary evidence (score=4)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 144,
+        "windowEnd": 192,
+        "directProbability": 4.601781256496906e-06,
+        "matches": true
+      },
       "leftCueId": "161",
       "rightCueId": "162",
       "reviewCategory": "clear_no_punctuation"
@@ -263,9 +306,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.004848532844334841,
+      "modelProbability": 2.93115390377352e-05,
       "reason": "continuation structure outweighs advisory punctuation, capitalization, and model boundary evidence (score=5)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 144,
+        "windowEnd": 192,
+        "directProbability": 2.93115390377352e-05,
+        "matches": true
+      },
       "leftCueId": "185",
       "rightCueId": "186",
       "reviewCategory": "clear_no_punctuation"
@@ -278,9 +327,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9405717849731445,
+      "modelProbability": 0.9844563603401184,
       "reason": "model probability favors a sentence boundary",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 144,
+        "windowEnd": 192,
+        "directProbability": 0.9844563603401184,
+        "matches": true
+      },
       "leftCueId": "173",
       "rightCueId": "174",
       "reviewCategory": "incorrect_period"
@@ -293,9 +348,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.00013552079326473176,
+      "modelProbability": 9.516251338936854e-06,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 144,
+        "windowEnd": 192,
+        "directProbability": 9.516251338936854e-06,
+        "matches": true
+      },
       "leftCueId": "174",
       "rightCueId": "175",
       "reviewCategory": "multi_cue_incorrect_period"
@@ -308,9 +369,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9478657245635986,
+      "modelProbability": 0.9956516623497009,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 180,
+        "windowEnd": 228,
+        "directProbability": 0.9956516623497009,
+        "matches": true
+      },
       "leftCueId": "194",
       "rightCueId": "195",
       "reviewCategory": "incorrect_period"
@@ -323,9 +390,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9643886089324951,
+      "modelProbability": 0.9942920207977295,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 360,
+        "windowEnd": 408,
+        "directProbability": 0.9942920207977295,
+        "matches": true
+      },
       "leftCueId": "375",
       "rightCueId": "376",
       "reviewCategory": "incorrect_period"
@@ -338,9 +411,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9367494583129883,
+      "modelProbability": 0.9610249400138855,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 576,
+        "windowEnd": 624,
+        "directProbability": 0.9610249400138855,
+        "matches": true
+      },
       "leftCueId": "614",
       "rightCueId": "615",
       "reviewCategory": "invalid_large_gap_incorrect_period"
@@ -351,11 +430,17 @@
       "right": "I didn't expect this to happen.",
       "gapMs": 130,
       "expected": "break",
-      "predicted": "break",
-      "decision": "break",
-      "modelProbability": 0.5457699298858643,
-      "reason": "model probability favors a sentence boundary",
-      "correct": true,
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.14139994978904724,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.14139994978904724,
+        "matches": true
+      },
       "leftCueId": "113",
       "rightCueId": "114",
       "reviewCategory": "independent_without_punctuation"
@@ -368,9 +453,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.04138471931219101,
+      "modelProbability": 0.01358439214527607,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 360,
+        "windowEnd": 408,
+        "directProbability": 0.01358439214527607,
+        "matches": true
+      },
       "leftCueId": "371",
       "rightCueId": "372",
       "reviewCategory": "independent_without_punctuation"
@@ -383,9 +474,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9912885427474976,
+      "modelProbability": 0.9993147850036621,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 612,
+        "windowEnd": 651,
+        "directProbability": 0.9993147850036621,
+        "matches": true
+      },
       "leftCueId": "620",
       "rightCueId": "621",
       "reviewCategory": "semantically_related_grammar_separate"
@@ -398,9 +495,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9811668992042542,
+      "modelProbability": 0.9962199330329895,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 612,
+        "windowEnd": 651,
+        "directProbability": 0.9962199330329895,
+        "matches": true
+      },
       "leftCueId": "625",
       "rightCueId": "626",
       "reviewCategory": "semantically_related_grammar_separate"
@@ -413,9 +516,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9956346154212952,
+      "modelProbability": 0.9970536231994629,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 108,
+        "windowEnd": 156,
+        "directProbability": 0.9970536231994629,
+        "matches": true
+      },
       "leftCueId": "132",
       "rightCueId": "133",
       "reviewCategory": "grammatically_compatible_semantically_unrelated"
@@ -425,15 +534,21 @@
       "left": "Since he's on your turf.",
       "right": "I assume you've taken care of him",
       "gapMs": 591,
-      "expected": "break",
+      "expected": "ambiguous",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9527502655982971,
+      "modelProbability": 0.9778834581375122,
       "reason": "model probability favors a sentence boundary",
-      "correct": true,
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 324,
+        "windowEnd": 372,
+        "directProbability": 0.9778834581375122,
+        "matches": true
+      },
       "leftCueId": "359",
       "rightCueId": "360",
-      "reviewCategory": "semantically_related_grammar_separate"
+      "reviewCategory": "ambiguous_break"
     },
     {
       "case": 31,
@@ -443,9 +558,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.7390459179878235,
+      "modelProbability": 0.9553191661834717,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 0,
+        "windowEnd": 48,
+        "directProbability": 0.9553191661834717,
+        "matches": true
+      },
       "leftCueId": "12",
       "rightCueId": "13",
       "reviewCategory": "question_answer"
@@ -458,9 +579,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9899476170539856,
+      "modelProbability": 0.9904406070709229,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 0,
+        "windowEnd": 48,
+        "directProbability": 0.9904406070709229,
+        "matches": true
+      },
       "leftCueId": "19",
       "rightCueId": "20",
       "reviewCategory": "question_answer"
@@ -473,9 +600,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.974190354347229,
+      "modelProbability": 0.9869794845581055,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 36,
+        "windowEnd": 84,
+        "directProbability": 0.9869794845581055,
+        "matches": true
+      },
       "leftCueId": "69",
       "rightCueId": "70",
       "reviewCategory": "question_answer"
@@ -488,9 +621,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9990527033805847,
+      "modelProbability": 0.9990673661231995,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 36,
+        "windowEnd": 84,
+        "directProbability": 0.9990673661231995,
+        "matches": true
+      },
       "leftCueId": "76",
       "rightCueId": "77",
       "reviewCategory": "question_answer"
@@ -503,9 +642,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9930423498153687,
+      "modelProbability": 0.9958337545394897,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.9958337545394897,
+        "matches": true
+      },
       "leftCueId": "94",
       "rightCueId": "95",
       "reviewCategory": "question_answer"
@@ -518,9 +663,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9779677391052246,
+      "modelProbability": 0.9951136708259583,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.9951136708259583,
+        "matches": true
+      },
       "leftCueId": "106",
       "rightCueId": "107",
       "reviewCategory": "question_answer"
@@ -533,9 +684,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.7947037816047668,
+      "modelProbability": 0.9891397356987,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 180,
+        "windowEnd": 228,
+        "directProbability": 0.9891397356987,
+        "matches": true
+      },
       "leftCueId": "207",
       "rightCueId": "208",
       "reviewCategory": "same_speaker_adjacent_sentences"
@@ -548,9 +705,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9870296716690063,
+      "modelProbability": 0.9980429410934448,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 360,
+        "windowEnd": 408,
+        "directProbability": 0.9980429410934448,
+        "matches": true
+      },
       "leftCueId": "384",
       "rightCueId": "385",
       "reviewCategory": "same_speaker_adjacent_sentences"
@@ -563,9 +726,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9515040516853333,
+      "modelProbability": 0.9853842854499817,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 360,
+        "windowEnd": 408,
+        "directProbability": 0.9853842854499817,
+        "matches": true
+      },
       "leftCueId": "388",
       "rightCueId": "389",
       "reviewCategory": "same_speaker_adjacent_sentences"
@@ -578,9 +747,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9996947050094604,
+      "modelProbability": 0.9993333220481873,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 288,
+        "windowEnd": 336,
+        "directProbability": 0.9993333220481873,
+        "matches": true
+      },
       "leftCueId": "299",
       "rightCueId": "300",
       "reviewCategory": "same_speaker_adjacent_sentences"
@@ -593,9 +768,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.0948452427983284,
+      "modelProbability": 0.009936419315636158,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 180,
+        "windowEnd": 228,
+        "directProbability": 0.009936419315636158,
+        "matches": true
+      },
       "leftCueId": "187",
       "rightCueId": "188",
       "reviewCategory": "same_speaker_adjacent_sentences"
@@ -608,9 +789,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9567959308624268,
+      "modelProbability": 0.9944666028022766,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 288,
+        "windowEnd": 336,
+        "directProbability": 0.9944666028022766,
+        "matches": true
+      },
       "leftCueId": "297",
       "rightCueId": "298",
       "reviewCategory": "possible_speaker_change_unlabeled"
@@ -623,9 +810,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9630919694900513,
+      "modelProbability": 0.9910838603973389,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 324,
+        "windowEnd": 372,
+        "directProbability": 0.9910838603973389,
+        "matches": true
+      },
       "leftCueId": "346",
       "rightCueId": "347",
       "reviewCategory": "possible_speaker_change_unlabeled"
@@ -638,9 +831,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9353464841842651,
+      "modelProbability": 0.9872281551361084,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 360,
+        "windowEnd": 408,
+        "directProbability": 0.9872281551361084,
+        "matches": true
+      },
       "leftCueId": "367",
       "rightCueId": "368",
       "reviewCategory": "possible_speaker_change_unlabeled"
@@ -653,9 +852,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9834068417549133,
+      "modelProbability": 0.9976677298545837,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 360,
+        "windowEnd": 408,
+        "directProbability": 0.9976677298545837,
+        "matches": true
+      },
       "leftCueId": "370",
       "rightCueId": "371",
       "reviewCategory": "possible_speaker_change_unlabeled"
@@ -668,9 +873,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.46304967999458313,
+      "modelProbability": 0.04586266353726387,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 396,
+        "windowEnd": 444,
+        "directProbability": 0.04586266353726387,
+        "matches": true
+      },
       "leftCueId": "411",
       "rightCueId": "412",
       "reviewCategory": "possible_speaker_change_unlabeled"
@@ -683,9 +894,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.062216974794864655,
+      "modelProbability": 0.003389783203601837,
       "reason": "break by default for large cue gap 1580ms",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 252,
+        "windowEnd": 300,
+        "directProbability": 0.003389783203601837,
+        "matches": true
+      },
       "leftCueId": "282",
       "rightCueId": "283",
       "reviewCategory": "valid_join_gap_1.5_2.5s"
@@ -698,9 +915,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.003960787784308195,
+      "modelProbability": 0.00010720879799919203,
       "reason": "break by default for large cue gap 1540ms",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 432,
+        "windowEnd": 480,
+        "directProbability": 0.00010720879799919203,
+        "matches": true
+      },
       "leftCueId": "454",
       "rightCueId": "455",
       "reviewCategory": "valid_join_gap_1.5_2.5s"
@@ -713,9 +936,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.027376487851142883,
+      "modelProbability": 0.00011501735571073368,
       "reason": "continuation structure outweighs advisory punctuation, capitalization, and model boundary evidence (score=4)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 576,
+        "windowEnd": 624,
+        "directProbability": 0.00011501735571073368,
+        "matches": true
+      },
       "leftCueId": "603",
       "rightCueId": "604",
       "reviewCategory": "valid_join_gap_1.5_2.5s"
@@ -728,9 +957,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9711838364601135,
+      "modelProbability": 0.9963357448577881,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 0,
+        "windowEnd": 48,
+        "directProbability": 0.9963357448577881,
+        "matches": true
+      },
       "leftCueId": "26",
       "rightCueId": "27",
       "reviewCategory": "invalid_medium_gap"
@@ -743,9 +978,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9941800832748413,
+      "modelProbability": 0.9952448010444641,
       "reason": "break by default for large cue gap 2280ms",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.9952448010444641,
+        "matches": true
+      },
       "leftCueId": "102",
       "rightCueId": "103",
       "reviewCategory": "invalid_medium_gap"
@@ -758,9 +999,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.999523401260376,
+      "modelProbability": 0.999652624130249,
       "reason": "break by default for large cue gap 2340ms",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 432,
+        "windowEnd": 480,
+        "directProbability": 0.999652624130249,
+        "matches": true
+      },
       "leftCueId": "455",
       "rightCueId": "456",
       "reviewCategory": "invalid_medium_gap"
@@ -773,9 +1020,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.6255525350570679,
+      "modelProbability": 0.9053223133087158,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 576,
+        "windowEnd": 624,
+        "directProbability": 0.9053223133087158,
+        "matches": true
+      },
       "leftCueId": "598",
       "rightCueId": "599",
       "reviewCategory": "invalid_large_gap"
@@ -788,9 +1041,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.95743727684021,
+      "modelProbability": 0.9820826053619385,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 576,
+        "windowEnd": 624,
+        "directProbability": 0.9820826053619385,
+        "matches": true
+      },
       "leftCueId": "608",
       "rightCueId": "609",
       "reviewCategory": "invalid_large_gap"
@@ -803,9 +1062,15 @@
       "expected": "break",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9958499670028687,
+      "modelProbability": 0.99703049659729,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 0,
+        "windowEnd": 48,
+        "directProbability": 0.99703049659729,
+        "matches": true
+      },
       "leftCueId": "31",
       "rightCueId": "32",
       "reviewCategory": "invalid_large_gap"
@@ -818,9 +1083,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.00032503585680387914,
+      "modelProbability": 1.193602383864345e-05,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 144,
+        "windowEnd": 192,
+        "directProbability": 1.193602383864345e-05,
+        "matches": true
+      },
       "leftCueId": "168",
       "rightCueId": "169",
       "reviewCategory": "multi_cue_sentence"
@@ -833,9 +1104,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.0009146137163043022,
+      "modelProbability": 6.540436970681185e-06,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 144,
+        "windowEnd": 192,
+        "directProbability": 6.540436970681185e-06,
+        "matches": true
+      },
       "leftCueId": "169",
       "rightCueId": "170",
       "reviewCategory": "multi_cue_sentence"
@@ -848,9 +1125,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.0017140384297817945,
+      "modelProbability": 0.0012793075293302536,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 504,
+        "windowEnd": 552,
+        "directProbability": 0.0012793075293302536,
+        "matches": true
+      },
       "leftCueId": "531",
       "rightCueId": "532",
       "reviewCategory": "multi_cue_sentence"
@@ -863,9 +1146,15 @@
       "expected": "join",
       "predicted": "join",
       "decision": "join",
-      "modelProbability": 0.0031115086749196053,
+      "modelProbability": 4.198630995233543e-05,
       "reason": "model probability favors continuation",
       "correct": true,
+      "windowCrossCheck": {
+        "windowStart": 504,
+        "windowEnd": 552,
+        "directProbability": 4.198630995233543e-05,
+        "matches": true
+      },
       "leftCueId": "532",
       "rightCueId": "533",
       "reviewCategory": "multi_cue_sentence"
@@ -878,9 +1167,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9901019334793091,
+      "modelProbability": 0.9806548357009888,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 216,
+        "windowEnd": 264,
+        "directProbability": 0.9806548357009888,
+        "matches": true
+      },
       "leftCueId": "241",
       "rightCueId": "242",
       "reviewCategory": "multi_cue_sentence"
@@ -893,12 +1188,183 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9771101474761963,
+      "modelProbability": 0.9751545190811157,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 216,
+        "windowEnd": 264,
+        "directProbability": 0.9751545190811157,
+        "matches": true
+      },
       "leftCueId": "242",
       "rightCueId": "243",
       "reviewCategory": "multi_cue_sentence"
+    },
+    {
+      "case": 62,
+      "left": "I wanted to surprise you",
+      "right": "I didn't expect this to happen.",
+      "gapMs": 130,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.14139994978904724,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.14139994978904724,
+        "matches": true
+      },
+      "leftCueId": "113",
+      "rightCueId": "114",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 63,
+      "left": "Wait here for a moment",
+      "right": "I'll go give him some change.",
+      "gapMs": 40,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.018833130598068237,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 108,
+        "windowEnd": 156,
+        "directProbability": 0.018833130598068237,
+        "matches": true
+      },
+      "leftCueId": "122",
+      "rightCueId": "123",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 64,
+      "left": "Go to Aunt Chen's and buy me some guangbing",
+      "right": "I have to clean the equipment tonight.",
+      "gapMs": 40,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.19345194101333618,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 108,
+        "windowEnd": 156,
+        "directProbability": 0.19345194101333618,
+        "matches": true
+      },
+      "leftCueId": "136",
+      "rightCueId": "137",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 65,
+      "left": "You finally let me go out alone",
+      "right": "I'm leaving then.",
+      "gapMs": 160,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.1509026288986206,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 108,
+        "windowEnd": 156,
+        "directProbability": 0.1509026288986206,
+        "matches": true
+      },
+      "leftCueId": "138",
+      "rightCueId": "139",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 66,
+      "left": "Where is Mingzhu",
+      "right": "I'll take you to her",
+      "gapMs": 330,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.49834537506103516,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 504,
+        "windowEnd": 552,
+        "directProbability": 0.49834537506103516,
+        "matches": true
+      },
+      "leftCueId": "540",
+      "rightCueId": "541",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 67,
+      "left": "Police suspect a professional",
+      "right": "assassin organization",
+      "gapMs": 24,
+      "expected": "join",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.00032503585680387914,
+      "reason": "model probability favors continuation",
+      "correct": true
+    },
+    {
+      "case": 68,
+      "left": "assassin organization",
+      "right": "is behind these murders.",
+      "gapMs": 24,
+      "expected": "join",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.0009146137163043022,
+      "reason": "model probability favors continuation",
+      "correct": true
+    },
+    {
+      "case": 69,
+      "left": "As soon as I got to the station",
+      "right": "I found your siste",
+      "gapMs": 260,
+      "expected": "join",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.0017140384297817945,
+      "reason": "model probability favors continuation",
+      "correct": true
+    },
+    {
+      "case": 70,
+      "left": "I found your siste",
+      "right": "delirious in the office.",
+      "gapMs": 24,
+      "expected": "join",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.0031115086749196053,
+      "reason": "model probability favors continuation",
+      "correct": true
+    },
+    {
+      "case": 71,
+      "left": "I don't want",
+      "right": "you to end up like your father.",
+      "gapMs": 330,
+      "expected": "join",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 4.0063696360448375e-05,
+      "reason": "model probability favors continuation",
+      "correct": true
     }
   ],
   "misclassified": [
@@ -910,9 +1376,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9405717849731445,
+      "modelProbability": 0.9844563603401184,
       "reason": "model probability favors a sentence boundary",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 144,
+        "windowEnd": 192,
+        "directProbability": 0.9844563603401184,
+        "matches": true
+      },
       "leftCueId": "173",
       "rightCueId": "174",
       "reviewCategory": "incorrect_period"
@@ -925,9 +1397,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9478657245635986,
+      "modelProbability": 0.9956516623497009,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 180,
+        "windowEnd": 228,
+        "directProbability": 0.9956516623497009,
+        "matches": true
+      },
       "leftCueId": "194",
       "rightCueId": "195",
       "reviewCategory": "incorrect_period"
@@ -940,12 +1418,39 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9643886089324951,
+      "modelProbability": 0.9942920207977295,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 360,
+        "windowEnd": 408,
+        "directProbability": 0.9942920207977295,
+        "matches": true
+      },
       "leftCueId": "375",
       "rightCueId": "376",
       "reviewCategory": "incorrect_period"
+    },
+    {
+      "case": 25,
+      "left": "I wanted to surprise you",
+      "right": "I didn't expect this to happen.",
+      "gapMs": 130,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.14139994978904724,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.14139994978904724,
+        "matches": true
+      },
+      "leftCueId": "113",
+      "rightCueId": "114",
+      "reviewCategory": "independent_without_punctuation"
     },
     {
       "case": 47,
@@ -955,9 +1460,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.062216974794864655,
+      "modelProbability": 0.003389783203601837,
       "reason": "break by default for large cue gap 1580ms",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 252,
+        "windowEnd": 300,
+        "directProbability": 0.003389783203601837,
+        "matches": true
+      },
       "leftCueId": "282",
       "rightCueId": "283",
       "reviewCategory": "valid_join_gap_1.5_2.5s"
@@ -970,9 +1481,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.003960787784308195,
+      "modelProbability": 0.00010720879799919203,
       "reason": "break by default for large cue gap 1540ms",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 432,
+        "windowEnd": 480,
+        "directProbability": 0.00010720879799919203,
+        "matches": true
+      },
       "leftCueId": "454",
       "rightCueId": "455",
       "reviewCategory": "valid_join_gap_1.5_2.5s"
@@ -985,9 +1502,15 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9901019334793091,
+      "modelProbability": 0.9806548357009888,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 216,
+        "windowEnd": 264,
+        "directProbability": 0.9806548357009888,
+        "matches": true
+      },
       "leftCueId": "241",
       "rightCueId": "242",
       "reviewCategory": "multi_cue_sentence"
@@ -1000,12 +1523,167 @@
       "expected": "join",
       "predicted": "break",
       "decision": "break",
-      "modelProbability": 0.9771101474761963,
+      "modelProbability": 0.9751545190811157,
       "reason": "soft evidence indicates independently complete statements (terminal punctuation/capitalization)",
       "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 216,
+        "windowEnd": 264,
+        "directProbability": 0.9751545190811157,
+        "matches": true
+      },
       "leftCueId": "242",
       "rightCueId": "243",
       "reviewCategory": "multi_cue_sentence"
+    },
+    {
+      "case": 62,
+      "left": "I wanted to surprise you",
+      "right": "I didn't expect this to happen.",
+      "gapMs": 130,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.14139994978904724,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.14139994978904724,
+        "matches": true
+      },
+      "leftCueId": "113",
+      "rightCueId": "114",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 63,
+      "left": "Wait here for a moment",
+      "right": "I'll go give him some change.",
+      "gapMs": 40,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.018833130598068237,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 108,
+        "windowEnd": 156,
+        "directProbability": 0.018833130598068237,
+        "matches": true
+      },
+      "leftCueId": "122",
+      "rightCueId": "123",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 64,
+      "left": "Go to Aunt Chen's and buy me some guangbing",
+      "right": "I have to clean the equipment tonight.",
+      "gapMs": 40,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.19345194101333618,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 108,
+        "windowEnd": 156,
+        "directProbability": 0.19345194101333618,
+        "matches": true
+      },
+      "leftCueId": "136",
+      "rightCueId": "137",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 65,
+      "left": "You finally let me go out alone",
+      "right": "I'm leaving then.",
+      "gapMs": 160,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.1509026288986206,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 108,
+        "windowEnd": 156,
+        "directProbability": 0.1509026288986206,
+        "matches": true
+      },
+      "leftCueId": "138",
+      "rightCueId": "139",
+      "reviewCategory": "full_context_break"
+    },
+    {
+      "case": 66,
+      "left": "Where is Mingzhu",
+      "right": "I'll take you to her",
+      "gapMs": 330,
+      "expected": "break",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.49834537506103516,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 504,
+        "windowEnd": 552,
+        "directProbability": 0.49834537506103516,
+        "matches": true
+      },
+      "leftCueId": "540",
+      "rightCueId": "541",
+      "reviewCategory": "full_context_break"
+    }
+  ],
+  "ambiguous": [
+    {
+      "case": 15,
+      "left": "My sister puts things in fixed places",
+      "right": "I know where they are by touch.",
+      "gapMs": 160,
+      "expected": "ambiguous",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.005384938325732946,
+      "reason": "model probability favors continuation",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 72,
+        "windowEnd": 120,
+        "directProbability": 0.005384938325732946,
+        "matches": true
+      },
+      "leftCueId": "97",
+      "rightCueId": "98",
+      "reviewCategory": "ambiguous_join"
+    },
+    {
+      "case": 30,
+      "left": "Since he's on your turf.",
+      "right": "I assume you've taken care of him",
+      "gapMs": 591,
+      "expected": "ambiguous",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.9778834581375122,
+      "reason": "model probability favors a sentence boundary",
+      "correct": false,
+      "windowCrossCheck": {
+        "windowStart": 324,
+        "windowEnd": 372,
+        "directProbability": 0.9778834581375122,
+        "matches": true
+      },
+      "leftCueId": "359",
+      "rightCueId": "360",
+      "reviewCategory": "ambiguous_break"
     }
   ],
   "realWindow": {

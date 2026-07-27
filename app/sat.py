@@ -3,7 +3,8 @@ from __future__ import annotations
 import math
 import re
 import threading
-from typing import Any, Protocol, Sequence, TypedDict
+from dataclasses import dataclass
+from typing import Any, NotRequired, Protocol, Sequence, TypedDict
 
 SAT_MODEL_NAME = "sat-3l-sm"
 _MAX_SEGMENT_LENGTH = 5000
@@ -26,14 +27,14 @@ _INVALID_CONTRACTION_BASES = {
 class SaTUnavailableError(RuntimeError):
     """Raised when the SaT model cannot be loaded or queried."""
 
-
 class BoundaryEvidence(TypedDict):
     """Model evidence for one original subtitle cue boundary."""
 
     leftIndex: int
     rightIndex: int
     characterOffset: int
-    boundaryProbability: float
+    boundaryProbability: float | None
+    status: NotRequired[str]  # "unavailable" when model could not score this boundary
 
 
 class SaTModel(Protocol):
@@ -215,6 +216,132 @@ def _validate_boundary_offsets(
         raise ValueError("boundary offsets must point inside the joined text")
 
 
+
+@dataclass(frozen=True, slots=True)
+class WindowedScoringConfig:
+    """Configuration for contextual windowing in boundary scoring.
+
+    ``window_size`` controls how many consecutive cues form one model call.
+    ``min_context`` controls how many extra cues on each side frame each
+    owned boundary.  The constraint ``window_size >= 2 * min_context + 2``
+    guarantees at least one owned boundary per interior window.
+    """
+
+    window_size: int = 48
+    min_context: int = 6
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.window_size, bool)
+            or not isinstance(self.window_size, int)
+            or self.window_size < 1
+        ):
+            raise ValueError("window_size must be a positive integer")
+        if (
+            isinstance(self.min_context, bool)
+            or not isinstance(self.min_context, int)
+            or self.min_context < 1
+        ):
+            raise ValueError("min_context must be a positive integer")
+        if self.window_size < 2 * self.min_context + 2:
+            raise ValueError(
+                f"window_size ({self.window_size}) must be >= "
+                f"2 * min_context + 2 ({2 * self.min_context + 2})"
+            )
+
+
+_WindowPlan = dict[str, int]  # windowStart, windowEnd, ownedStart, ownedEnd
+
+
+def _build_window_plan(
+    segment_count: int,
+    config: WindowedScoringConfig,
+) -> list[_WindowPlan]:
+    """Build a deterministic window plan before calling the model.
+
+    Each plan item records the segment range (windowStart, windowEnd) and
+    the boundary index range (ownedStart, ownedEnd) that the window owns.
+
+    The first window owns from boundary 0.  The last window owns through
+    boundary N - 2.  Interior windows own only their central boundaries,
+    leaving the overlap region to adjacent windows.  Every boundary index
+    from 0 through N - 2 has exactly one owner.
+    """
+    n = segment_count
+    num_boundaries = n - 1
+
+    if n <= config.window_size:
+        return [
+            {
+                "windowStart": 0,
+                "windowEnd": n,
+                "ownedStart": 0,
+                "ownedEnd": num_boundaries - 1,
+            }
+        ]
+
+    hop = config.window_size - 2 * config.min_context
+    plan: list[_WindowPlan] = []
+    start = 0
+
+    while start < n:
+        window_end = min(n, start + config.window_size)
+
+        # First window: own from boundary 0.
+        # Interior windows: own central region.
+        # Last window: own through the final boundary.
+        owned_start = start + config.min_context if start > 0 else 0
+        owned_end = min(
+            num_boundaries - 1,
+            start + config.window_size - config.min_context - 1,
+        )
+        if window_end >= n:
+            owned_end = num_boundaries - 1
+
+        plan.append(
+            {
+                "windowStart": start,
+                "windowEnd": window_end,
+                "ownedStart": owned_start,
+                "ownedEnd": owned_end,
+            }
+        )
+
+        if window_end >= n:
+            break
+        start += hop
+
+    return plan
+
+
+def _validate_window_plan(plan: list[_WindowPlan], num_boundaries: int) -> None:
+    """Validate coverage and ordering invariants of a window plan."""
+    assert plan, "window plan must not be empty"
+    assert plan[0]["ownedStart"] == 0, "first owned boundary must be 0"
+    assert plan[-1]["ownedEnd"] == num_boundaries - 1, "final owned boundary must be N-2"
+
+    for i in range(len(plan)):
+        p = plan[i]
+        assert 0 <= p["ownedStart"] <= p["ownedEnd"] < num_boundaries
+
+    for i in range(len(plan) - 1):
+        assert plan[i]["windowStart"] < plan[i + 1]["windowStart"], (
+            "windows must be in source order"
+        )
+        assert plan[i]["ownedEnd"] < plan[i + 1]["ownedStart"], (
+            "owned ranges must not overlap"
+        )
+        assert plan[i]["ownedEnd"] + 1 == plan[i + 1]["ownedStart"], (
+            "owned ranges must have no gaps"
+        )
+
+    owned_count = sum(
+        p["ownedEnd"] - p["ownedStart"] + 1 for p in plan
+    )
+    assert owned_count == num_boundaries, (
+        f"expected {num_boundaries} owned boundaries, plan covers {owned_count}"
+    )
+
 class SaTSentenceReconstructor:
     """Reconstruct ordered fragments and segment them with Segment Any Text."""
 
@@ -289,64 +416,67 @@ class SaTSentenceReconstructor:
         self,
         segments: Sequence[str],
         *,
-        window_size: int = 48,
-        min_context: int = 6,
+        config: WindowedScoringConfig | None = None,
     ) -> list[BoundaryEvidence]:
         """Score boundaries using overlapping contextual windows.
 
-        Each boundary is evaluated with a local context window of
-        ``window_size`` cues. Windows overlap by ``2 * min_context`` cues
-        to ensure every boundary has at least ``min_context - 1`` cues of
-        context on each side.
+        Uses a deterministic window plan created before any model call.
+        Each window is scored independently.  A failure in one window
+        marks only its owned boundaries as unavailable and does not
+        affect other windows.
 
-        Failed windows fall back to BREAK (probability 0.0) for only their
-        unassigned boundaries.
+        Unavailable evidence is reported with ``boundaryProbability=None``
+        and ``status="unavailable"``.  The subtitle policy treats
+        unavailable evidence as UNCERTAIN, which is safe (BREAK).
         """
-        n = len(segments)
-        if n < 2:
+        _validate_segments(segments)
+        if len(segments) < 2:
             return []
 
-        if window_size < 2 * min_context + 2 or min_context < 1:
-            return self.score_boundaries(segments)
-
-        # For small segment counts, score everything in one window
-        if n <= window_size:
-            return self.score_boundaries(segments)
-
-        hop = window_size - 2 * min_context
+        cfg = config or WindowedScoringConfig()
+        n = len(segments)
         num_boundaries = n - 1
+
+        if n <= cfg.window_size:
+            # Single window covering all segments
+            try:
+                return self.score_boundaries(segments)
+            except Exception:
+                return [
+                    {
+                        "leftIndex": i,
+                        "rightIndex": i + 1,
+                        "characterOffset": 0,
+                        "boundaryProbability": None,
+                        "status": "unavailable",
+                    }
+                    for i in range(num_boundaries)
+                ]
+
+        plan = _build_window_plan(n, cfg)
+        _validate_window_plan(plan, num_boundaries)
+
         results: list[BoundaryEvidence | None] = [None] * num_boundaries
 
-        for window_idx in range(0, n, hop):
-            start = window_idx
-            end = min(n, start + window_size)
-
-            window_segments = segments[start:end]
-            if len(window_segments) < 2:
-                break
-
+        for wp in plan:
+            window_segments = segments[wp["windowStart"] : wp["windowEnd"]]
             try:
                 window_evidence = self.score_boundaries(window_segments)
             except Exception:
-                for boundary_idx in range(start, min(n - 1, end - 1)):
-                    if boundary_idx < len(results) and results[boundary_idx] is None:
-                        results[boundary_idx] = {
-                            "leftIndex": boundary_idx,
-                            "rightIndex": boundary_idx + 1,
-                            "characterOffset": 0,
-                            "boundaryProbability": 0.0,
-                        }
+                # Mark only this window's owned boundaries as unavailable.
+                for b in range(wp["ownedStart"], wp["ownedEnd"] + 1):
+                    results[b] = {
+                        "leftIndex": b,
+                        "rightIndex": b + 1,
+                        "characterOffset": 0,
+                        "boundaryProbability": None,
+                        "status": "unavailable",
+                    }
                 continue
 
-            owned_start = start + min_context
-            owned_end = min(n - 1, end - 1 - min_context)
-
             for offset, evidence in enumerate(window_evidence):
-                boundary_idx = start + offset
-                if boundary_idx > owned_end:
-                    break
-                if boundary_idx >= owned_start and results[boundary_idx] is None:
-                    # Re-index evidence to full-file positions
+                boundary_idx = wp["windowStart"] + offset
+                if wp["ownedStart"] <= boundary_idx <= wp["ownedEnd"]:
                     results[boundary_idx] = {
                         "leftIndex": boundary_idx,
                         "rightIndex": boundary_idx + 1,
@@ -354,15 +484,10 @@ class SaTSentenceReconstructor:
                         "boundaryProbability": evidence["boundaryProbability"],
                     }
 
-        for i in range(num_boundaries):
-            if results[i] is None:
-                results[i] = {
-                    "leftIndex": i,
-                    "rightIndex": i + 1,
-                    "characterOffset": 0,
-                    "boundaryProbability": 0.0,
-                }
-
+        # The plan guarantee every boundary has been assigned.
+        assert all(r is not None for r in results), (
+            "window plan did not cover every boundary"
+        )
         return results  # type: ignore[return-value]
 
     def _get_model(self) -> SaTModel | SaTProbabilityModel:

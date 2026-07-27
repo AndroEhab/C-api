@@ -1,6 +1,6 @@
 {
   "source": "Murder Game 2026 iQY WEB.srt",
-  "output": "Murder Game 2026 iQY WEB_reconstructed.srt",
+  "output": "_reconstructed.srt",
   "model": "sat-3l-sm",
   "policy": "BoundaryPolicyConfig defaults",
   "comparison": {
