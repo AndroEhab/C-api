@@ -29,7 +29,7 @@ REQUIRED_KEYS = frozenset(
     {"left", "right", "previousContext", "nextContext", "gapMs", "expected"}
 )
 OPTIONAL_REVIEW_KEYS = frozenset({"leftCueId", "rightCueId", "reviewCategory"})
-LABELS = frozenset({"join", "break"})
+LABELS = frozenset({"join", "break", "ambiguous"})
 
 def _validate_example(value: Any, index: int) -> dict[str, Any]:
     if not isinstance(value, Mapping):
@@ -73,6 +73,60 @@ def load_fixture(path: Path = DEFAULT_FIXTURE) -> list[dict[str, Any]]:
     return [_validate_example(value, index) for index, value in enumerate(payload, start=1)]
 
 
+def load_source_srt(path: Path = DEFAULT_WINDOW_SRT) -> dict[str, str]:
+    """Load source SRT text by cue ID for fixture validation."""
+    return {s.segment_id: s.text for s in parse_srt_file(path)}
+def validate_fixture_texts(
+    cases: Sequence[Mapping[str, Any]],
+    source_texts: dict[str, str],
+) -> None:
+    """Verify fixture left/right text matches the source SRT for each case."""
+    mismatches: list[str] = []
+    for index, case in enumerate(cases, start=1):
+        for side in ("left", "right"):
+            cue_key = f"{side}CueId"
+            cue_id = case.get(cue_key)
+            if cue_id is None:
+                continue
+            fixture_text = case[side]
+            source_text = source_texts.get(cue_id)
+            if source_text is None:
+                mismatches.append(
+                    f"case {index}: {cue_id} not found in source SRT"
+                )
+            elif fixture_text.strip() != source_text.strip():
+                mismatches.append(
+                    f"case {index}: {cue_id} fixture text {fixture_text!r} "
+                    f"differs from source {source_text!r}"
+                )
+    if mismatches:
+        raise AssertionError(
+            "fixture text validation failed:\n" + "\n".join(mismatches)
+        )
+
+
+def _find_boundary_index(
+    segments: Sequence[SubtitleSegment],
+    left_cue_id: str,
+    right_cue_id: str,
+) -> int | None:
+    for i in range(len(segments) - 1):
+        if segments[i].segment_id == left_cue_id and segments[i + 1].segment_id == right_cue_id:
+            return i
+    return None
+
+
+def _build_decisions_from_full_file(
+    full_segments: list[SubtitleSegment],
+    reconstructor: SubtitleSentenceReconstructor,
+) -> list[dict | None]:
+    """Run the production windowed pipeline on the full file once."""
+    try:
+        return reconstructor.evaluate_boundaries(full_segments)
+    except Exception:
+        return [None] * max(0, len(full_segments) - 1)
+
+
 def _segments_for_case(case: Mapping[str, Any], index: int) -> tuple[list[SubtitleSegment], str, str]:
     previous_context = list(case["previousContext"])
     texts = previous_context + [case["left"], case["right"]] + list(case["nextContext"])
@@ -102,14 +156,49 @@ def _evaluate_case(
     case: Mapping[str, Any],
     index: int,
     reconstructor: SubtitleSentenceReconstructor,
+    *,
+    full_file_decisions: list[dict] | None = None,
+    full_file_segments: list[SubtitleSegment] | None = None,
 ) -> dict[str, Any]:
+    left_cue_id = case.get("leftCueId")
+    right_cue_id = case.get("rightCueId")
+
+    # Murder Game cases: use pre-computed full-file decisions
+    if left_cue_id and right_cue_id and full_file_decisions is not None and full_file_segments is not None:
+        boundary_index = _find_boundary_index(full_file_segments, left_cue_id, right_cue_id)
+        if boundary_index is None:
+            raise ValueError(
+                f"case {index}: boundary ({left_cue_id}/{right_cue_id}) "
+                f"not found in full file"
+            )
+        decision = full_file_decisions[boundary_index]
+        if decision is None:
+            raise ValueError(f"case {index}: full-file evaluation failed for boundary {boundary_index}")
+        predicted = "join" if decision["decision"] == "join" else "break"
+        result = {
+            "case": index,
+            "left": case["left"],
+            "right": case["right"],
+            "gapMs": case["gapMs"],
+            "expected": case["expected"],
+            "predicted": predicted,
+            "decision": decision["decision"],
+            "modelProbability": decision["modelProbability"],
+            "reason": decision["reason"],
+            "correct": predicted == case["expected"],
+        }
+        for field in OPTIONAL_REVIEW_KEYS & set(case):
+            result[field] = case[field]
+        return result
+
+    # Synthetic cases: construct segments and evaluate normally
     segments, left_id, right_id = _segments_for_case(case, index)
     decisions = reconstructor.evaluate_boundaries(segments)
     boundary_index = next(
         (
             position
-            for position, decision in enumerate(decisions)
-            if decision["leftSegmentId"] == left_id and decision["rightSegmentId"] == right_id
+            for position, dec in enumerate(decisions)
+            if dec["leftSegmentId"] == left_id and dec["rightSegmentId"] == right_id
         ),
         None,
     )
@@ -139,48 +228,79 @@ def classify_boundary(
     case: Mapping[str, Any],
     index: int,
     reconstructor: SubtitleSentenceReconstructor,
+    *,
+    full_file_decisions: list[dict] | None = None,
+    full_file_segments: list[SubtitleSegment] | None = None,
 ) -> str:
-    """Classify one fixture boundary using the unchanged production decision path."""
-    return _evaluate_case(case, index, reconstructor)["predicted"]
+    """Classify one fixture boundary using the production windowed path."""
+    return _evaluate_case(
+        case, index, reconstructor,
+        full_file_decisions=full_file_decisions,
+        full_file_segments=full_file_segments,
+    )["predicted"]
 
 
 def evaluate_fixture(
     cases: Sequence[Mapping[str, Any]],
     reconstructor: SubtitleSentenceReconstructor | None = None,
+    *,
+    source_srt_path: Path | None = None,
 ) -> dict[str, Any]:
     current = reconstructor or SubtitleSentenceReconstructor(SaTSentenceReconstructor())
+
+    # Pre-compute full-file decisions for Murder Game cases
+    full_file_decisions: list[dict] | None = None
+    full_file_segments: list[SubtitleSegment] | None = None
+    if source_srt_path is not None:
+        full_file_segments = parse_srt_file(source_srt_path)
+        full_file_decisions = _build_decisions_from_full_file(full_file_segments, current)
+
     case_results = [
-        _evaluate_case(case, index, current)
+        _evaluate_case(
+            case, index, current,
+            full_file_decisions=full_file_decisions,
+            full_file_segments=full_file_segments,
+        )
         for index, case in enumerate(cases, start=1)
     ]
 
-    expected_join = sum(result["expected"] == "join" for result in case_results)
-    predicted_join = sum(result["predicted"] == "join" for result in case_results)
+    # Separate ambiguous cases
+    labeled_results = [
+        r for r in case_results
+        if cases[r["case"] - 1].get("expected") != "ambiguous"
+    ]
+    ambiguous_results = [
+        r for r in case_results
+        if cases[r["case"] - 1].get("expected") == "ambiguous"
+    ]
+
+    expected_join = sum(cases[r["case"] - 1]["expected"] == "join" for r in labeled_results)
+    predicted_join = sum(r["predicted"] == "join" for r in labeled_results)
     true_join = sum(
-        result["expected"] == "join" and result["predicted"] == "join"
-        for result in case_results
+        cases[r["case"] - 1]["expected"] == "join" and r["predicted"] == "join"
+        for r in labeled_results
     )
-    expected_break = sum(result["expected"] == "break" for result in case_results)
+    expected_break = sum(cases[r["case"] - 1]["expected"] == "break" for r in labeled_results)
     true_break = sum(
-        result["expected"] == "break" and result["predicted"] == "break"
-        for result in case_results
+        cases[r["case"] - 1]["expected"] == "break" and r["predicted"] == "break"
+        for r in labeled_results
     )
     false_merges = sum(
-        result["expected"] == "break" and result["predicted"] == "join"
-        for result in case_results
+        cases[r["case"] - 1]["expected"] == "break" and r["predicted"] == "join"
+        for r in labeled_results
     )
     false_negatives = sum(
-        result["expected"] == "join" and result["predicted"] != "join"
-        for result in case_results
+        cases[r["case"] - 1]["expected"] == "join" and r["predicted"] != "join"
+        for r in labeled_results
     )
     total = len(case_results)
-    misclassified = [result for result in case_results if not result["correct"]]
+    misclassified = [r for r in case_results if not r["correct"]]
 
     return {
         "metrics": {
             "totalBoundaries": total,
-            # Keep the case count explicit for consumers of the earlier report format.
             "cases": total,
+            "ambiguousCount": len(ambiguous_results),
             "expectedJoin": expected_join,
             "expectedBreak": expected_break,
             "predictedJoin": predicted_join,
@@ -194,6 +314,7 @@ def evaluate_fixture(
         },
         "cases": case_results,
         "misclassified": misclassified,
+        "ambiguous": ambiguous_results,
     }
 
 
@@ -339,6 +460,8 @@ def _print_report(report: Mapping[str, Any]) -> None:
         f"total_boundaries={metrics['totalBoundaries']} "
         f"expected_join={metrics['expectedJoin']} expected_break={metrics['expectedBreak']}"
     )
+    if metrics.get("ambiguousCount"):
+        print(f"ambiguous={metrics['ambiguousCount']}")
     print(f"JOIN precision={metrics['joinPrecision']:.3f} recall={metrics['joinRecall']:.3f}")
     print(f"BREAK accuracy={metrics['breakAccuracy']:.3f}")
     print(
@@ -358,14 +481,25 @@ def _print_report(report: Mapping[str, Any]) -> None:
     else:
         print("misclassified: none")
 
-    window = report["realWindow"]
-    print("real score_boundaries verification")
-    print(
-        f"  cues={','.join(window['cueIds'])} scores={window['scoreCount']} "
-        f"expected={window['expectedScoreCount']} "
-        f"predict_proba_shape={tuple(window['predictProbaOutputShape'])} "
-        f"checks={all(window['checks'].values())}"
-    )
+    if report.get("ambiguous"):
+        print("ambiguous:")
+        for result in report["ambiguous"]:
+            print(
+                f"  case={result['case']} expected={result['expected']} "
+                f"predicted={result['predicted']} "
+                f"model_probability={result['modelProbability']} "
+                f"left={result['left']!r} right={result['right']!r}"
+            )
+
+    if "realWindow" in report:
+        window = report["realWindow"]
+        print("real score_boundaries verification")
+        print(
+            f"  cues={','.join(window['cueIds'])} scores={window['scoreCount']} "
+            f"expected={window['expectedScoreCount']} "
+            f"predict_proba_shape={tuple(window['predictProbaOutputShape'])} "
+            f"checks={all(window['checks'].values())}"
+        )
 
 
 def _fixture_name(path: Path) -> str:
@@ -388,8 +522,14 @@ def main() -> None:
     args = parser.parse_args()
 
     cases = load_fixture(args.fixture)
+    source_texts = load_source_srt(args.window_srt)
+    validate_fixture_texts(cases, source_texts)
     sat_service = SaTSentenceReconstructor()
-    report = evaluate_fixture(cases, SubtitleSentenceReconstructor(sat_service))
+    report = evaluate_fixture(
+        cases,
+        SubtitleSentenceReconstructor(sat_service),
+        source_srt_path=args.window_srt,
+    )
     window_segments = load_real_window(args.window_srt, args.window_cues.split(","))
     report = {
         "implementation": "SubtitleSentenceReconstructor(SaTSentenceReconstructor).evaluate_boundaries",
@@ -404,7 +544,3 @@ def main() -> None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         print(f"saved={args.output}")
-
-
-if __name__ == "__main__":
-    main()

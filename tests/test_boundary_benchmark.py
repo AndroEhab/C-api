@@ -20,12 +20,13 @@ class ConstantBoundaryApi:
 def test_boundary_fixture_contains_the_identified_cases() -> None:
     cases = load_fixture()
 
-    assert len(cases) == 61
-    assert [case["expected"] for case in cases].count("join") == 27
-    assert [case["expected"] for case in cases].count("break") == 34
+    assert len(cases) == 71
+    assert [case["expected"] for case in cases].count("join") == 31
+    assert [case["expected"] for case in cases].count("break") == 38
+    assert [case["expected"] for case in cases].count("ambiguous") == 2
     assert cases[0]["left"] == "This case"
-    assert cases[-1]["rightCueId"] == "243"
-    reviewed = cases[11:]
+    assert cases[-1]["right"] == "you to end up like your father."
+    reviewed = cases[11:61]
     assert len(reviewed) == 50
     assert all(
         {"leftCueId", "rightCueId", "reviewCategory"} <= set(case)
@@ -35,6 +36,18 @@ def test_boundary_fixture_contains_the_identified_cases() -> None:
     assert "grammatically_compatible_semantically_unrelated" in {
         case["reviewCategory"] for case in reviewed
     }
+    # Regression cases (indices 61-70)
+    regression = cases[61:]
+    assert len(regression) == 10
+    assert all({"left", "right", "expected"} <= set(case) for case in regression)
+    # BREAK regressions have cue IDs for full-file evaluation
+    break_regs = regression[:5]
+    join_regs = regression[5:]
+    assert all(case.get("leftCueId") and case.get("rightCueId") for case in break_regs)
+    assert all(case["expected"] == "break" for case in break_regs)
+    assert all(case["expected"] == "join" for case in join_regs)
+    assert break_regs[0]["left"] == "I wanted to surprise you"
+    assert join_regs[0]["left"] == "Police suspect a professional"
 
 
 def test_fixture_report_keeps_model_probability_on_misclassified_boundaries() -> None:

@@ -285,6 +285,86 @@ class SaTSentenceReconstructor:
             for boundary_index, character_offset in enumerate(boundary_offsets)
         ]
 
+    def windowed_score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        window_size: int = 48,
+        min_context: int = 6,
+    ) -> list[BoundaryEvidence]:
+        """Score boundaries using overlapping contextual windows.
+
+        Each boundary is evaluated with a local context window of
+        ``window_size`` cues. Windows overlap by ``2 * min_context`` cues
+        to ensure every boundary has at least ``min_context - 1`` cues of
+        context on each side.
+
+        Failed windows fall back to BREAK (probability 0.0) for only their
+        unassigned boundaries.
+        """
+        n = len(segments)
+        if n < 2:
+            return []
+
+        if window_size < 2 * min_context + 2 or min_context < 1:
+            return self.score_boundaries(segments)
+
+        # For small segment counts, score everything in one window
+        if n <= window_size:
+            return self.score_boundaries(segments)
+
+        hop = window_size - 2 * min_context
+        num_boundaries = n - 1
+        results: list[BoundaryEvidence | None] = [None] * num_boundaries
+
+        for window_idx in range(0, n, hop):
+            start = window_idx
+            end = min(n, start + window_size)
+
+            window_segments = segments[start:end]
+            if len(window_segments) < 2:
+                break
+
+            try:
+                window_evidence = self.score_boundaries(window_segments)
+            except Exception:
+                for boundary_idx in range(start, min(n - 1, end - 1)):
+                    if boundary_idx < len(results) and results[boundary_idx] is None:
+                        results[boundary_idx] = {
+                            "leftIndex": boundary_idx,
+                            "rightIndex": boundary_idx + 1,
+                            "characterOffset": 0,
+                            "boundaryProbability": 0.0,
+                        }
+                continue
+
+            owned_start = start + min_context
+            owned_end = min(n - 1, end - 1 - min_context)
+
+            for offset, evidence in enumerate(window_evidence):
+                boundary_idx = start + offset
+                if boundary_idx > owned_end:
+                    break
+                if boundary_idx >= owned_start and results[boundary_idx] is None:
+                    # Re-index evidence to full-file positions
+                    results[boundary_idx] = {
+                        "leftIndex": boundary_idx,
+                        "rightIndex": boundary_idx + 1,
+                        "characterOffset": evidence["characterOffset"],
+                        "boundaryProbability": evidence["boundaryProbability"],
+                    }
+
+        for i in range(num_boundaries):
+            if results[i] is None:
+                results[i] = {
+                    "leftIndex": i,
+                    "rightIndex": i + 1,
+                    "characterOffset": 0,
+                    "boundaryProbability": 0.0,
+                }
+
+        return results  # type: ignore[return-value]
+
     def _get_model(self) -> SaTModel | SaTProbabilityModel:
         if self._model is not None:
             return self._model

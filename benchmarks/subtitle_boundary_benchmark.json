@@ -142,10 +142,10 @@
       "Sir."
     ],
     "gapMs": 160,
-    "expected": "join",
+    "expected": "ambiguous",
     "leftCueId": "97",
     "rightCueId": "98",
-    "reviewCategory": "clear_no_punctuation"
+    "reviewCategory": "ambiguous_join"
   },
   {
     "left": "Without solid evidence",
@@ -367,10 +367,10 @@
       "I've heard you're the best."
     ],
     "gapMs": 591,
-    "expected": "break",
+    "expected": "ambiguous",
     "leftCueId": "359",
     "rightCueId": "360",
-    "reviewCategory": "semantically_related_grammar_separate"
+    "reviewCategory": "ambiguous_break"
   },
   {
     "left": "You.",
@@ -836,5 +836,140 @@
     "leftCueId": "242",
     "rightCueId": "243",
     "reviewCategory": "multi_cue_sentence"
+  },
+  {
+    "left": "I wanted to surprise you",
+    "right": "I didn't expect this to happen.",
+    "previousContext": [
+      "Why are you home so early today."
+    ],
+    "nextContext": [
+      "Luckily the police came in time."
+    ],
+    "gapMs": 130,
+    "expected": "break",
+    "leftCueId": "113",
+    "rightCueId": "114",
+    "reviewCategory": "full_context_break"
+  },
+  {
+    "left": "Wait here for a moment",
+    "right": "I'll go give him some change.",
+    "previousContext": [
+      "There's a little beggar behind us."
+    ],
+    "nextContext": [
+      "Wait here for me."
+    ],
+    "gapMs": 40,
+    "expected": "break",
+    "leftCueId": "122",
+    "rightCueId": "123",
+    "reviewCategory": "full_context_break"
+  },
+  {
+    "left": "Go to Aunt Chen's and buy me some guangbing",
+    "right": "I have to clean the equipment tonight.",
+    "previousContext": [
+      "Mingzhu."
+    ],
+    "nextContext": [
+      "Be careful."
+    ],
+    "gapMs": 40,
+    "expected": "break",
+    "leftCueId": "136",
+    "rightCueId": "137",
+    "reviewCategory": "full_context_break"
+  },
+  {
+    "left": "You finally let me go out alone",
+    "right": "I'm leaving then.",
+    "previousContext": [
+      "I have to clean the equipment tonight."
+    ],
+    "nextContext": [
+      "Be careful."
+    ],
+    "gapMs": 160,
+    "expected": "break",
+    "leftCueId": "138",
+    "rightCueId": "139",
+    "reviewCategory": "full_context_break"
+  },
+  {
+    "left": "Where is Mingzhu",
+    "right": "I'll take you to her",
+    "previousContext": [
+      "I'm begging you."
+    ],
+    "nextContext": [
+      "Mingzhu."
+    ],
+    "gapMs": 330,
+    "expected": "break",
+    "leftCueId": "540",
+    "rightCueId": "541",
+    "reviewCategory": "full_context_break"
+  },
+  {
+    "left": "Police suspect a professional",
+    "right": "assassin organization",
+    "previousContext": [
+      "There have been multiple homicides in the city recently."
+    ],
+    "nextContext": [
+      "is behind these murders."
+    ],
+    "gapMs": 24,
+    "expected": "join"
+  },
+  {
+    "left": "assassin organization",
+    "right": "is behind these murders.",
+    "previousContext": [
+      "Police suspect a professional"
+    ],
+    "nextContext": [
+      "The organization uses cruel methods."
+    ],
+    "gapMs": 24,
+    "expected": "join"
+  },
+  {
+    "left": "As soon as I got to the station",
+    "right": "I found your siste",
+    "previousContext": [
+      "I'm here to pick up my sister."
+    ],
+    "nextContext": [
+      "delirious in the office."
+    ],
+    "gapMs": 260,
+    "expected": "join"
+  },
+  {
+    "left": "I found your siste",
+    "right": "delirious in the office.",
+    "previousContext": [
+      "As soon as I got to the station"
+    ],
+    "nextContext": [
+      "She kept calling for her sister."
+    ],
+    "gapMs": 24,
+    "expected": "join"
+  },
+  {
+    "left": "I don't want",
+    "right": "you to end up like your father.",
+    "previousContext": [
+      "If we don't investigate, who will."
+    ],
+    "nextContext": [
+      "He threw himself into cases"
+    ],
+    "gapMs": 330,
+    "expected": "join"
   }
 ]

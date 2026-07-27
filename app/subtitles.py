@@ -802,15 +802,20 @@ class SubtitleSentenceReconstructor:
         if not boundary_count:
             return [], None
 
-        score_boundaries = getattr(self.boundary_api, "score_boundaries", None)
-        if not callable(score_boundaries):
-            return (
-                [None] * boundary_count,
-                "boundary scoring is unavailable",
-            )
+        texts = [segment.text for segment in segments]
+        windowed = getattr(self.boundary_api, "windowed_score_boundaries", None)
+        if callable(windowed):
+            response = windowed(texts)
+        else:
+            score_boundaries = getattr(self.boundary_api, "score_boundaries", None)
+            if not callable(score_boundaries):
+                return (
+                    [None] * boundary_count,
+                    "boundary scoring is unavailable",
+                )
+            response = score_boundaries(texts)
 
         try:
-            response = score_boundaries([segment.text for segment in segments])
             evidence = _normalise_boundary_evidence(response, segments)
         except Exception as exc:
             return (
