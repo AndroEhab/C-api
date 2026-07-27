@@ -15,6 +15,10 @@ from .model import (
 )
 
 from .sat import SaTSentenceReconstructor, SaTUnavailableError
+from .subtitles import (
+    SubtitleSegment,
+    SubtitleSentenceReconstructor,
+)
 
 
 class SentenceFromSegmentsRequest(BaseModel):
@@ -56,6 +60,70 @@ class SentenceFromSegmentsResponse(BaseModel):
     full_sentence: str | None
     is_single_sentence: bool
 
+
+
+class SubtitleSegmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    segment_id: str = Field(..., alias="segmentId", min_length=1)
+    text: str = Field(..., min_length=1)
+    start_ms: int = Field(..., alias="startMs", ge=0)
+    end_ms: int = Field(..., alias="endMs", ge=0)
+    speaker: str | None = Field(default=None)
+
+    @field_validator("text")
+    @classmethod
+    def require_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("text must contain non-whitespace text")
+        return value
+
+    @model_validator(mode="after")
+    def require_valid_timing(self) -> "SubtitleSegmentRequest":
+        if self.end_ms < self.start_ms:
+            raise ValueError("endMs must be greater than or equal to startMs")
+        return self
+
+    def to_domain(self) -> SubtitleSegment:
+        return SubtitleSegment(
+            segment_id=self.segment_id,
+            text=self.text,
+            start_ms=self.start_ms,
+            end_ms=self.end_ms,
+            speaker=self.speaker,
+        )
+
+
+class ReconstructedSentencePartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    segment_id: str = Field(..., alias="segmentId")
+    text: str
+    start_ms: int = Field(..., alias="startMs")
+    end_ms: int = Field(..., alias="endMs")
+
+
+class ReconstructedSentenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    text: str
+    start_ms: int = Field(..., alias="startMs")
+    end_ms: int = Field(..., alias="endMs")
+    segment_ids: list[str] = Field(..., alias="segmentIds")
+    parts: list[ReconstructedSentencePartResponse]
+
+
+class SubtitleReconstructionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    segments: list[SubtitleSegmentRequest] = Field(..., min_length=1)
+
+
+class SubtitleReconstructionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    segments: list[SubtitleSegmentRequest]
+    sentences: list[ReconstructedSentenceResponse]
 
 
 class SimilarityRequest(BaseModel):
@@ -166,8 +234,17 @@ sat_service = SaTSentenceReconstructor()
 def get_similarity_service() -> MiniLMSimilarity:
     return similarity_service
 
+
 def get_sat_service() -> SaTSentenceReconstructor:
     return sat_service
+
+
+def get_subtitle_service(
+    service: SaTSentenceReconstructor = Depends(get_sat_service),
+) -> SubtitleSentenceReconstructor:
+    return SubtitleSentenceReconstructor(service)
+
+
 
 
 @app.exception_handler(ModelUnavailableError)
@@ -224,3 +301,21 @@ def sentence_from_segments(
     service: SaTSentenceReconstructor = Depends(get_sat_service),
 ) -> SentenceFromSegmentsResponse:
     return SentenceFromSegmentsResponse(**service.reconstruct(request.segments))
+
+
+@app.post(
+    "/reconstruct-subtitles",
+    response_model=SubtitleReconstructionResponse,
+    tags=["segmentation"],
+)
+def reconstruct_subtitles(
+    request: SubtitleReconstructionRequest,
+    service: SubtitleSentenceReconstructor = Depends(get_subtitle_service),
+) -> SubtitleReconstructionResponse:
+    """Reconstruct sentence context while retaining every original cue."""
+    segments = [segment.to_domain() for segment in request.segments]
+    sentences = service.reconstruct(segments)
+    return SubtitleReconstructionResponse(
+        segments=request.segments,
+        sentences=[ReconstructedSentenceResponse(**sentence.to_dict()) for sentence in sentences],
+    )

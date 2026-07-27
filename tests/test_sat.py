@@ -182,6 +182,28 @@ def test_sat_failure_returns_503() -> None:
     assert response.json() == {"detail": "Unable to segment text with SaT"}
 
 
+def test_group_contract_returns_explicit_source_indexes_and_ids() -> None:
+    service = SaTSentenceReconstructor(model=FakeSaTModel())
+
+    response = service.group(
+        [
+            {"segmentId": "144", "text": "This case"},
+            {"segmentId": "145", "text": "could be a breakthrough."},
+        ]
+    )
+
+    assert response == {
+        "model": SAT_MODEL_NAME,
+        "groups": [
+            {
+                "segmentIndexes": [0, 1],
+                "segmentIds": ["144", "145"],
+                "text": "This case could be a breakthrough.",
+            }
+        ],
+    }
+
+
 def test_segmentation_route_is_in_openapi(api: TestClient) -> None:
     response = api.get("/openapi.json")
 
