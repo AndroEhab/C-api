@@ -18,8 +18,58 @@ _CUE_TIMING_RE = re.compile(
     r"(?P<end>\d+:[0-5]\d:[0-5]\d[,.]\d{3})(?:\s+.*)?$"
 )
 
-DEFAULT_MAX_MERGE_GAP_MS = 1_500
-MODEL_BOUNDARY_THRESHOLD = 0.5
+@dataclass(frozen=True, slots=True)
+class BoundaryPolicyConfig:
+    """Initial defaults; normal/medium/large/extreme ranges require benchmark calibration."""
+
+    normal_gap_max_ms: int = 500
+    medium_gap_max_ms: int = 1_500
+    extreme_gap_ms: int = 30_000
+    normal_model_join_max_probability: float = 0.50
+    medium_model_join_max_probability: float = 0.20
+    large_model_join_max_probability: float = 0.05
+    continuation_override_max_probability: float = 0.95
+    min_continuation_score: int = 3
+
+    def __post_init__(self) -> None:
+        for name in ("normal_gap_max_ms", "medium_gap_max_ms", "extreme_gap_ms"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        if self.normal_gap_max_ms > self.medium_gap_max_ms:
+            raise ValueError("normal_gap_max_ms must not exceed medium_gap_max_ms")
+        if self.medium_gap_max_ms >= self.extreme_gap_ms:
+            raise ValueError("medium_gap_max_ms must be less than extreme_gap_ms")
+
+        for name in (
+            "normal_model_join_max_probability",
+            "medium_model_join_max_probability",
+            "large_model_join_max_probability",
+            "continuation_override_max_probability",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{name} must be numeric")
+            if not math.isfinite(float(value)) or not 0.0 <= float(value) <= 1.0:
+                raise ValueError(f"{name} must be within [0, 1]")
+        if (
+            self.normal_model_join_max_probability
+            < self.medium_model_join_max_probability
+            or self.medium_model_join_max_probability
+            < self.large_model_join_max_probability
+        ):
+            raise ValueError(
+                "model join thresholds must become stricter as the timing gap grows"
+            )
+        if (
+            isinstance(self.min_continuation_score, bool)
+            or not isinstance(self.min_continuation_score, int)
+            or self.min_continuation_score < 1
+        ):
+            raise ValueError("min_continuation_score must be a positive integer")
+
+
+DEFAULT_BOUNDARY_POLICY_CONFIG = BoundaryPolicyConfig()
 _LOGGER = logging.getLogger(__name__)
 _STRONG_SENTENCE_END_RE = re.compile(r"""[.!?…]+(?:["'’”»)\]}]+)?$""")
 _DIALOGUE_DASH_RE = re.compile(r"^\s*(?:--?|[–—]|>>)\s+")
@@ -29,6 +79,26 @@ _VOICE_TAG_RE = re.compile(
 )
 _FORMATTING_TAG_RE = re.compile(r"</?[^>]+>|\{\\[^}]+\}")
 _WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)?")
+_CUE_ID_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<number>\d+)$")
+_SUBORDINATE_STARTS = frozenset(
+    {"although", "because", "if", "since", "though", "unless", "when", "while"}
+)
+_CONTINUATION_STARTS = frozenset(
+    {"and", "as", "because", "but", "for", "if", "nor", "or", "so", "that", "while"}
+)
+_CONTINUATION_PRONOUNS = frozenset(
+    {"her", "his", "its", "my", "our", "their", "the", "this", "that", "your"}
+)
+_WH_STARTS = frozenset({"how", "what", "when", "where", "which", "who", "whom", "whose", "why"})
+_INCOMPLETE_ENDINGS = frozenset(
+    {"a", "an", "and", "as", "at", "because", "but", "for", "if", "of", "or", "than", "to", "with"}
+)
+_COMPLEMENT_CONTINUATION_RE = re.compile(
+    r"\b(?:i['’]?ll|i\s+will|i\s+can)\s+"
+    r"(?:tell|show|explain)\s+(?:you|him|her|them)\b",
+    re.IGNORECASE,
+)
+_COMPARATIVE_CONTINUATION_RE = re.compile(r"^\s*better\s+to\b", re.IGNORECASE)
 _QUESTION_STARTS = frozenset(
     {
         "am",
@@ -60,10 +130,6 @@ _QUESTION_STARTS = frozenset(
         "would",
     }
 )
-_RESPONSE_START_RE = re.compile(
-    r"^(?:yes|no|nope|yeah|okay|ok|sure|well|of course|I think|I will|I'll)\b",
-    re.IGNORECASE,
-)
 _FINITE_VERB_RE = re.compile(
     r"\b(?:am|are|can|could|did|do|does|had|has|have|is|may|might|must|"
     r"shall|should|was|were|will|would|won't|can't|don't|doesn't|didn't|"
@@ -72,7 +138,6 @@ _FINITE_VERB_RE = re.compile(
     r"need|needs|know|knows|knew|escaped|issue|live|die)\b",
     re.IGNORECASE,
 )
-
 
 def _visible_text(text: str) -> str:
     return _FORMATTING_TAG_RE.sub("", text).strip()
@@ -110,17 +175,106 @@ def _looks_like_question(text: str) -> bool:
 
 def _likely_complete_clause(text: str) -> bool:
     visible = _visible_text(text)
+    if _ends_strong_sentence(visible) or _looks_like_question(visible):
+        return True
+    words = _words(visible)
+    return len(words) >= 2 and _FINITE_VERB_RE.search(visible) is not None
+
+
+def _appears_incomplete(text: str) -> bool:
+    """Return weak evidence that a cue is a fragment of a larger clause."""
+    visible = _visible_text(text)
+    words = _words(visible)
+    if not words or _ends_strong_sentence(visible) or _looks_like_question(visible):
+        return False
+    first = words[0].casefold()
+    last = words[-1].casefold()
     return (
-        _ends_strong_sentence(visible)
-        or _looks_like_question(visible)
-        or _FINITE_VERB_RE.search(visible) is not None
+        len(words) == 1
+        or last in _INCOMPLETE_ENDINGS
+        or first in _SUBORDINATE_STARTS
+        or re.search(r"[a-z]$", visible) is not None
     )
 
 
-def _looks_like_answer(text: str) -> bool:
-    visible = _visible_text(text)
-    return _RESPONSE_START_RE.match(visible) is not None or _starts_new_sentence(visible)
+def _continuation_structure_score(left: str, right: str) -> int:
+    """Score multi-signal continuation patterns without keyword-only joins."""
+    left_visible = _visible_text(left)
+    right_visible = _visible_text(right)
+    left_words = _words(left_visible)
+    right_words = _words(right_visible)
+    if not left_words or not right_words:
+        return 0
 
+    first_right = right_words[0].casefold()
+    first_left = left_words[0].casefold()
+    score = 0
+    first_letter = re.search(r"[A-Za-z]", right_visible)
+    if first_letter is not None and first_letter.group(0).islower() and len(right_words) >= 2:
+        score += 2
+
+    if (
+        first_right == "than"
+        and len(right_words) >= 3
+        and _COMPARATIVE_CONTINUATION_RE.search(left_visible) is not None
+    ):
+        score += 3
+
+    if (
+        first_left in _SUBORDINATE_STARTS
+        and first_right in _CONTINUATION_PRONOUNS
+        and len(left_words) >= 3
+        and len(right_words) >= 3
+        and _likely_complete_clause(right_visible)
+    ):
+        score += 3
+
+    if (
+        first_right in _WH_STARTS
+        and len(right_words) >= 3
+        and _starts_new_sentence(right_visible)
+        and _COMPLEMENT_CONTINUATION_RE.search(left_visible) is not None
+    ):
+        score += 4
+
+    if (
+        first_right in _CONTINUATION_STARTS
+        and not _ends_strong_sentence(left_visible)
+        and len(right_words) >= 2
+    ):
+        score += 2
+    return score
+
+
+def _looks_like_independent_statements(
+    left: str,
+    right: str,
+    continuation_score: int,
+) -> bool:
+    if continuation_score:
+        return False
+    if not (_likely_complete_clause(left) and _likely_complete_clause(right)):
+        return False
+
+    left_incomplete = _appears_incomplete(left)
+    right_incomplete = _appears_incomplete(right)
+    right_visible = _visible_text(right)
+    right_words = _words(right_visible)
+    right_starts_lowercase_question = (
+        bool(right_words)
+        and right_words[0].casefold() in _WH_STARTS
+        and _ends_strong_sentence(right_visible)
+    )
+    if left_incomplete and not (
+        _ends_strong_sentence(right_visible)
+        and (_starts_new_sentence(right_visible) or right_starts_lowercase_question)
+    ):
+        return False
+    if right_incomplete and not _ends_strong_sentence(right_visible):
+        return False
+
+    right_starts_sentence = _starts_new_sentence(right_visible)
+    return right_starts_sentence or right_starts_lowercase_question
 
 @dataclass(frozen=True, slots=True)
 class SubtitleSegment:
@@ -471,47 +625,126 @@ def _normalise_boundary_evidence(
     return evidence
 
 
-def _boundary_safety_reason(
-    left: SubtitleSegment,
-    right: SubtitleSegment,
-    max_gap_ms: int,
-) -> str | None:
-    # Lexical checks may force a BREAK, but never override a model BREAK with JOIN.
-    gap_ms = right.start_ms - left.end_ms
-    if gap_ms > max_gap_ms:
-        return f"cue gap {gap_ms}ms exceeds maximum {max_gap_ms}ms"
-    if left.speaker != right.speaker and (left.speaker is not None or right.speaker is not None):
-        return "adjacent cues have different explicit speakers"
-    if _has_speaker_marker(right.text):
-        return "next cue has a dialogue or speaker marker"
+def _source_cue_order_reason(left: SubtitleSegment, right: SubtitleSegment) -> str | None:
+    if right.start_ms < left.start_ms:
+        return "cue order is invalid"
 
+    left_match = _CUE_ID_SUFFIX_RE.fullmatch(left.segment_id.strip())
+    right_match = _CUE_ID_SUFFIX_RE.fullmatch(right.segment_id.strip())
+    if left_match is None or right_match is None:
+        return None
+    if left_match["prefix"] != right_match["prefix"]:
+        return None
+
+    left_number = int(left_match["number"])
+    right_number = int(right_match["number"])
+    if right_number <= left_number:
+        return "cue order is invalid"
+    if right_number != left_number + 1:
+        return "source cues are not consecutive"
+    return None
+
+
+def _text_corruption_reason(left: SubtitleSegment, right: SubtitleSegment) -> str | None:
     join_issue = text_join_issue(left.text, right.text)
     if join_issue is not None:
-        return f"unsafe text boundary: {join_issue}"
-    if _looks_like_question(left.text) and _looks_like_answer(right.text):
-        return "question appears to be followed by an answer"
-    if (
-        _RESPONSE_START_RE.match(_visible_text(right.text)) is not None
-        and _likely_complete_clause(left.text)
-    ):
-        return "next cue looks like a conversational response"
-    if (
-        _likely_complete_clause(left.text)
-        and _likely_complete_clause(right.text)
-        and (
-            _starts_new_sentence(right.text)
-            or (_ends_strong_sentence(left.text) and _ends_strong_sentence(right.text))
-        )
-    ):
-        return "adjacent cues look like independently complete statements"
-    if _ends_strong_sentence(left.text) and _starts_new_sentence(right.text):
-        return "first cue ends a sentence and the next starts a new one"
+        return f"joining would corrupt text: {join_issue}"
 
     source_non_space = re.sub(r"\s+", "", left.text + right.text)
     joined = join_segments([left.text, right.text])
     if re.sub(r"\s+", "", joined) != source_non_space:
-        return "display join would lose or reorder source text"
+        return "joining would corrupt text: display join would lose or reorder source text"
     return None
+
+
+def _boundary_hard_break_reason(
+    left: SubtitleSegment,
+    right: SubtitleSegment,
+    gap_ms: int,
+    config: BoundaryPolicyConfig,
+) -> str | None:
+    if left.speaker != right.speaker and (left.speaker is not None or right.speaker is not None):
+        return "adjacent cues have different explicit speakers"
+    if _has_speaker_marker(right.text):
+        return "next cue has a dialogue or voice marker"
+
+    source_order_reason = _source_cue_order_reason(left, right)
+    if source_order_reason is not None:
+        return source_order_reason
+    if gap_ms > config.extreme_gap_ms:
+        return (
+            f"cue gap {gap_ms}ms exceeds extreme-gap threshold "
+            f"{config.extreme_gap_ms}ms"
+        )
+    return _text_corruption_reason(left, right)
+
+
+def _gap_band(gap_ms: int, config: BoundaryPolicyConfig) -> str:
+    if gap_ms <= config.normal_gap_max_ms:
+        return "normal"
+    if gap_ms <= config.medium_gap_max_ms:
+        return "medium"
+    if gap_ms < config.extreme_gap_ms:
+        return "large"
+    return "extreme"
+
+
+def _model_join_threshold(gap_band: str, config: BoundaryPolicyConfig) -> float:
+    if gap_band == "normal":
+        return config.normal_model_join_max_probability
+    if gap_band == "medium":
+        return config.medium_model_join_max_probability
+    return config.large_model_join_max_probability
+
+
+def _soft_boundary_decision(
+    left: SubtitleSegment,
+    right: SubtitleSegment,
+    gap_ms: int,
+    model_probability: float,
+    config: BoundaryPolicyConfig,
+) -> tuple[BoundaryDecisionValue, str]:
+    gap_band = _gap_band(gap_ms, config)
+    continuation_score = _continuation_structure_score(left.text, right.text)
+    strong_continuation = continuation_score >= config.min_continuation_score
+    independent_statements = _looks_like_independent_statements(
+        left.text,
+        right.text,
+        continuation_score if strong_continuation else 0,
+    )
+
+    if (
+        strong_continuation
+        and model_probability <= config.continuation_override_max_probability
+        and (
+            gap_band == "normal"
+            or model_probability < _model_join_threshold(gap_band, config)
+        )
+    ):
+        return (
+            "join",
+            "continuation structure outweighs advisory punctuation, capitalization, "
+            f"and model boundary evidence (score={continuation_score})",
+        )
+
+    if independent_statements:
+        return (
+            "break",
+            "soft evidence indicates independently complete statements "
+            "(terminal punctuation/capitalization)",
+        )
+
+    if gap_band == "large":
+        return "break", f"break by default for large cue gap {gap_ms}ms"
+    if gap_band == "extreme":
+        return "break", f"break for extreme cue gap {gap_ms}ms"
+
+    threshold = _model_join_threshold(gap_band, config)
+    if model_probability < threshold:
+        return "join", "model probability favors continuation"
+    if model_probability > threshold:
+        return "break", "model probability favors a sentence boundary"
+    return "uncertain", "soft boundary evidence is exactly ambiguous"
 
 
 class SubtitleSentenceReconstructor:
@@ -521,13 +754,30 @@ class SubtitleSentenceReconstructor:
         self,
         boundary_api: BoundaryScoringApi | SaTSentenceReconstructor,
         *,
-        max_gap_ms: int = DEFAULT_MAX_MERGE_GAP_MS,
+        policy_config: BoundaryPolicyConfig | None = None,
+        max_gap_ms: int | None = None,
         debug: bool = False,
     ) -> None:
-        if isinstance(max_gap_ms, bool) or not isinstance(max_gap_ms, int) or max_gap_ms < 0:
-            raise ValueError("max_gap_ms must be a non-negative integer")
+        if policy_config is not None and not isinstance(policy_config, BoundaryPolicyConfig):
+            raise TypeError("policy_config must be a BoundaryPolicyConfig")
+        if max_gap_ms is not None:
+            if isinstance(max_gap_ms, bool) or not isinstance(max_gap_ms, int) or max_gap_ms < 0:
+                raise ValueError("max_gap_ms must be a non-negative integer")
+            if policy_config is not None:
+                raise ValueError("max_gap_ms cannot be combined with policy_config")
+            default = DEFAULT_BOUNDARY_POLICY_CONFIG
+            policy_config = BoundaryPolicyConfig(
+                normal_gap_max_ms=min(default.normal_gap_max_ms, max_gap_ms),
+                medium_gap_max_ms=max_gap_ms,
+                extreme_gap_ms=max(default.extreme_gap_ms, max_gap_ms + 1),
+                normal_model_join_max_probability=default.normal_model_join_max_probability,
+                medium_model_join_max_probability=default.medium_model_join_max_probability,
+                large_model_join_max_probability=default.large_model_join_max_probability,
+                continuation_override_max_probability=default.continuation_override_max_probability,
+                min_continuation_score=default.min_continuation_score,
+            )
         self.boundary_api = boundary_api
-        self.max_gap_ms = max_gap_ms
+        self.policy_config = policy_config or DEFAULT_BOUNDARY_POLICY_CONFIG
         self.debug = debug
 
     def _log_boundary_issue(
@@ -573,7 +823,7 @@ class SubtitleSentenceReconstructor:
         self,
         segments: Sequence[SubtitleSegment],
     ) -> list[BoundaryDecision]:
-        """Return exactly one independent decision for every adjacent cue pair."""
+        """Return one hard/soft policy decision for every adjacent cue pair."""
         ordered = _validate_segments(segments)
         evidence, evidence_error = self._score_boundary_evidence(ordered)
         decisions: list[BoundaryDecision] = []
@@ -584,25 +834,36 @@ class SubtitleSentenceReconstructor:
                 current_evidence["modelProbability"] if current_evidence is not None else None
             )
             gap_ms = right.start_ms - left.end_ms
-            safety_reason = _boundary_safety_reason(left, right, self.max_gap_ms)
-            if safety_reason is not None:
+            hard_reason = _boundary_hard_break_reason(
+                left,
+                right,
+                gap_ms,
+                self.policy_config,
+            )
+            if hard_reason is not None:
                 decision: BoundaryDecisionValue = "break"
-                reason = safety_reason
+                reason = hard_reason
+            elif (
+                current_evidence is None
+                and evidence_error
+                and "changes cue order" in evidence_error
+            ):
+                decision = "break"
+                reason = f"cue order is invalid: {evidence_error}"
             elif current_evidence is None:
                 decision = "uncertain"
                 reason = evidence_error or "boundary model evidence is unavailable"
             elif model_probability is None:
                 decision = "uncertain"
                 reason = "boundary model probability is unavailable"
-            elif model_probability < MODEL_BOUNDARY_THRESHOLD:
-                decision = "join"
-                reason = "model probability favors continuation"
-            elif model_probability > MODEL_BOUNDARY_THRESHOLD:
-                decision = "break"
-                reason = "model probability favors a sentence boundary"
             else:
-                decision = "uncertain"
-                reason = "model probability is exactly ambiguous"
+                decision, reason = _soft_boundary_decision(
+                    left,
+                    right,
+                    gap_ms,
+                    model_probability,
+                    self.policy_config,
+                )
 
             if decision != "join" and self.debug:
                 self._log_boundary_issue(left.segment_id, right.segment_id, reason)

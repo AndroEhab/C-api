@@ -1,0 +1,233 @@
+{
+  "implementation": "SubtitleSentenceReconstructor(SaTSentenceReconstructor).evaluate_boundaries",
+  "model": "sat-3l-sm",
+  "fixture": "benchmarks/subtitle_boundary_benchmark.json",
+  "windowSrt": "Murder Game 2026 iQY WEB.srt",
+  "metrics": {
+    "totalBoundaries": 11,
+    "cases": 11,
+    "expectedJoin": 6,
+    "expectedBreak": 5,
+    "predictedJoin": 3,
+    "trueJoin": 3,
+    "trueBreak": 5,
+    "joinPrecision": 1.0,
+    "joinRecall": 0.5,
+    "breakAccuracy": 1.0,
+    "falseMergeCount": 0,
+    "falseNegativeCount": 3
+  },
+  "cases": [
+    {
+      "case": 1,
+      "left": "This case",
+      "right": "could be a breakthrough.",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 3.194181772414595e-05,
+      "reason": "model probability favors continuation",
+      "correct": true
+    },
+    {
+      "case": 2,
+      "left": "Police suspect a professional",
+      "right": "assassin organization",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.0006263342220336199,
+      "reason": "model probability favors continuation",
+      "correct": true
+    },
+    {
+      "case": 3,
+      "left": "assassin organization",
+      "right": "is behind these murders.",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "join",
+      "decision": "join",
+      "modelProbability": 0.0007379196467809379,
+      "reason": "model probability favors continuation",
+      "correct": true
+    },
+    {
+      "case": 4,
+      "left": "Better to die quick.",
+      "right": "Than live in pain.",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.5559777021408081,
+      "reason": "adjacent cues look like independently complete statements",
+      "correct": false
+    },
+    {
+      "case": 5,
+      "left": "If other traffickers catch 'em.",
+      "right": "Their fate'll be even worse.",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.20721471309661865,
+      "reason": "adjacent cues look like independently complete statements",
+      "correct": false
+    },
+    {
+      "case": 6,
+      "left": "I'll tell you.",
+      "right": "Who your sister is.",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.9174507260322571,
+      "reason": "adjacent cues look like independently complete statements",
+      "correct": false
+    },
+    {
+      "case": 7,
+      "left": "Better to die quick",
+      "right": "I love ice cream.",
+      "gapMs": 0,
+      "expected": "break",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.14033624529838562,
+      "reason": "adjacent cues look like independently complete statements",
+      "correct": true
+    },
+    {
+      "case": 8,
+      "left": "Fame is a good thing.",
+      "right": "Why refuse.",
+      "gapMs": 0,
+      "expected": "break",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.954562783241272,
+      "reason": "adjacent cues look like independently complete statements",
+      "correct": true
+    },
+    {
+      "case": 9,
+      "left": "Do you know her past.",
+      "right": "How much blood is on her hands.",
+      "gapMs": 0,
+      "expected": "break",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.9871788024902344,
+      "reason": "question appears to be followed by an answer",
+      "correct": true
+    },
+    {
+      "case": 10,
+      "left": "Where is Mingzhu?",
+      "right": "I'll take you to her.",
+      "gapMs": 0,
+      "expected": "break",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.9398029446601868,
+      "reason": "question appears to be followed by an answer",
+      "correct": true
+    },
+    {
+      "case": 11,
+      "left": "This case",
+      "right": "could be a breakthrough.",
+      "gapMs": 37000,
+      "expected": "break",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 3.194181772414595e-05,
+      "reason": "cue gap 37000ms exceeds maximum 1500ms",
+      "correct": true
+    }
+  ],
+  "misclassified": [
+    {
+      "case": 4,
+      "left": "Better to die quick.",
+      "right": "Than live in pain.",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.5559777021408081,
+      "reason": "adjacent cues look like independently complete statements",
+      "correct": false
+    },
+    {
+      "case": 5,
+      "left": "If other traffickers catch 'em.",
+      "right": "Their fate'll be even worse.",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.20721471309661865,
+      "reason": "adjacent cues look like independently complete statements",
+      "correct": false
+    },
+    {
+      "case": 6,
+      "left": "I'll tell you.",
+      "right": "Who your sister is.",
+      "gapMs": 0,
+      "expected": "join",
+      "predicted": "break",
+      "decision": "break",
+      "modelProbability": 0.9174507260322571,
+      "reason": "adjacent cues look like independently complete statements",
+      "correct": false
+    }
+  ],
+  "realWindow": {
+    "cueIds": [
+      "168",
+      "169",
+      "170"
+    ],
+    "texts": [
+      "Police suspect a professional",
+      "assassin organization",
+      "is behind these murders."
+    ],
+    "joinedText": "Police suspect a professional assassin organization is behind these murders.",
+    "scoreCount": 2,
+    "expectedScoreCount": 2,
+    "predictProbaOutputShape": [
+      76
+    ],
+    "joinedTextCharacterCount": 76,
+    "checks": {
+      "exactlyNMinusOneScores": true,
+      "probabilitiesFiniteAndInRange": true,
+      "characterOffsetsMatchCueBoundaries": true,
+      "predictProbaShapeHandled": true
+    },
+    "boundaries": [
+      {
+        "leftCueId": "168",
+        "rightCueId": "169",
+        "characterOffset": 28,
+        "expectedCharacterOffset": 28,
+        "boundaryProbability": 0.0006667023408226669
+      },
+      {
+        "leftCueId": "169",
+        "rightCueId": "170",
+        "characterOffset": 50,
+        "expectedCharacterOffset": 50,
+        "boundaryProbability": 0.0007643033750355244
+      }
+    ]
+  }
+}

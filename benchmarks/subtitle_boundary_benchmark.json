@@ -1,0 +1,90 @@
+[
+  {
+    "left": "This case",
+    "right": "could be a breakthrough.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "join"
+  },
+  {
+    "left": "Police suspect a professional",
+    "right": "assassin organization",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "join"
+  },
+  {
+    "left": "assassin organization",
+    "right": "is behind these murders.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "join"
+  },
+  {
+    "left": "Better to die quick.",
+    "right": "Than live in pain.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "join"
+  },
+  {
+    "left": "If other traffickers catch 'em.",
+    "right": "Their fate'll be even worse.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "join"
+  },
+  {
+    "left": "I'll tell you.",
+    "right": "Who your sister is.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "join"
+  },
+  {
+    "left": "Better to die quick",
+    "right": "I love ice cream.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "break"
+  },
+  {
+    "left": "Fame is a good thing.",
+    "right": "Why refuse.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "break"
+  },
+  {
+    "left": "Do you know her past.",
+    "right": "How much blood is on her hands.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "break"
+  },
+  {
+    "left": "Where is Mingzhu?",
+    "right": "I'll take you to her.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 0,
+    "expected": "break"
+  },
+  {
+    "left": "This case",
+    "right": "could be a breakthrough.",
+    "previousContext": [],
+    "nextContext": [],
+    "gapMs": 37000,
+    "expected": "break"
+  }
+]

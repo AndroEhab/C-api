@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.main import app, get_subtitle_service
 from app.sat import join_segments
 from app.subtitles import (
+    BoundaryPolicyConfig,
     ReconstructedSentence,
     SubtitleSegment,
     SubtitleSentenceReconstructor,
@@ -487,6 +488,118 @@ def test_configurable_gap_threshold_is_applied() -> None:
 
     assert [sentence.segment_ids for sentence in default_groups] == [["a"], ["b"]]
     assert [sentence.segment_ids for sentence in configured_groups] == [["a", "b"]]
+
+
+def test_boundary_policy_config_uses_calibrated_gap_bands() -> None:
+    config = BoundaryPolicyConfig(
+        normal_gap_max_ms=100,
+        medium_gap_max_ms=500,
+        extreme_gap_ms=2_000,
+    )
+
+    def decide(gap_ms: int, probability: float) -> Mapping[str, Any]:
+        api = FakeBoundaryApi([probability], [])
+        cues = [
+            segment("a", "This case", 0, 1_000),
+            segment("b", "could be a breakthrough.", 1_000 + gap_ms, 2_000 + gap_ms),
+        ]
+        return SubtitleSentenceReconstructor(api, policy_config=config).evaluate_boundaries(cues)[0]
+
+    assert decide(100, 0.49)["decision"] == "join"
+    assert decide(500, 0.25)["decision"] == "break"
+    assert decide(500, 0.10)["decision"] == "join"
+    assert decide(1_000, 0.0)["reason"] == "break by default for large cue gap 1000ms"
+    assert decide(2_001, 0.0)["reason"] == (
+        "cue gap 2001ms exceeds extreme-gap threshold 2000ms"
+    )
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "speaker", "expected_reason"),
+    [
+        ("Hello.", "Hi.", ("Alice", "Bob"), "different explicit speakers"),
+        ("Wait here.", "- I'll go.", (None, None), "dialogue or voice marker"),
+        ("her", "'ve taken care.", (None, None), "joining would corrupt text"),
+    ],
+)
+def test_hard_boundary_constraints_always_break(
+    left: str,
+    right: str,
+    speaker: tuple[str | None, str | None],
+    expected_reason: str,
+) -> None:
+    api = FakeBoundaryApi([0.0], [])
+    cues = [
+        segment("a", left, 0, 500, speaker[0]),
+        segment("b", right, 500, 1_000, speaker[1]),
+    ]
+
+    decision = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)[0]
+
+    assert decision["decision"] == "break"
+    assert expected_reason in decision["reason"]
+
+
+@pytest.mark.parametrize(
+    ("left_id", "right_id", "expected_reason"),
+    [
+        ("2", "1", "cue order is invalid"),
+        ("10", "12", "source cues are not consecutive"),
+    ],
+)
+def test_invalid_source_adjacency_is_a_hard_break(
+    left_id: str,
+    right_id: str,
+    expected_reason: str,
+) -> None:
+    api = FakeBoundaryApi([0.0], [])
+    cues = [
+        segment(left_id, "This case", 0, 500),
+        segment(right_id, "could continue.", 500, 1_000),
+    ]
+
+    decision = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)[0]
+
+    assert decision["decision"] == "break"
+    assert decision["reason"] == expected_reason
+
+
+def test_boundary_evidence_that_changes_cue_order_is_a_hard_break() -> None:
+    api = FakeBoundaryApi(
+        [{"leftSegmentId": "b", "rightSegmentId": "a", "boundaryProbability": 0.0}],
+        [],
+    )
+    cues = [
+        segment("a", "This case", 0, 500),
+        segment("b", "could continue.", 500, 1_000),
+    ]
+
+    decision = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)[0]
+
+    assert decision["decision"] == "break"
+    assert decision["reason"].startswith("cue order is invalid:")
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "probability", "expected"),
+    [
+        ("Better to die quick.", "Than live in pain.", 0.90, "join"),
+        ("Fame is a good thing.", "Why refuse.", 0.10, "break"),
+        ("Better to die quick", "I love ice cream.", 0.10, "break"),
+    ],
+)
+def test_punctuation_and_capitalization_are_advisory_soft_evidence(
+    left: str,
+    right: str,
+    probability: float,
+    expected: str,
+) -> None:
+    api = FakeBoundaryApi([probability], [])
+    cues = [segment("a", left, 0, 500), segment("b", right, 500, 1_000)]
+
+    decision = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)[0]
+
+    assert decision["decision"] == expected
 
 
 def test_rejected_boundary_does_not_destroy_valid_joins(caplog: pytest.LogCaptureFixture) -> None:
