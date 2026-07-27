@@ -20,11 +20,21 @@ class ConstantBoundaryApi:
 def test_boundary_fixture_contains_the_identified_cases() -> None:
     cases = load_fixture()
 
-    assert len(cases) == 11
-    assert [case["expected"] for case in cases].count("join") == 6
-    assert [case["expected"] for case in cases].count("break") == 5
+    assert len(cases) == 61
+    assert [case["expected"] for case in cases].count("join") == 27
+    assert [case["expected"] for case in cases].count("break") == 34
     assert cases[0]["left"] == "This case"
-    assert cases[-1]["gapMs"] == 37_000
+    assert cases[-1]["rightCueId"] == "243"
+    reviewed = cases[11:]
+    assert len(reviewed) == 50
+    assert all(
+        {"leftCueId", "rightCueId", "reviewCategory"} <= set(case)
+        for case in reviewed
+    )
+    assert len({(case["leftCueId"], case["rightCueId"]) for case in reviewed}) == 50
+    assert "grammatically_compatible_semantically_unrelated" in {
+        case["reviewCategory"] for case in reviewed
+    }
 
 
 def test_fixture_report_keeps_model_probability_on_misclassified_boundaries() -> None:

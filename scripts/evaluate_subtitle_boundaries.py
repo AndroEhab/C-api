@@ -25,23 +25,24 @@ from app.subtitles import (  # noqa: E402
 DEFAULT_FIXTURE = PROJECT_ROOT / "benchmarks" / "subtitle_boundary_benchmark.json"
 DEFAULT_WINDOW_SRT = PROJECT_ROOT / "Murder Game 2026 iQY WEB.srt"
 DEFAULT_WINDOW_CUES = ("168", "169", "170")
-EXPECTED_KEYS = frozenset(
+REQUIRED_KEYS = frozenset(
     {"left", "right", "previousContext", "nextContext", "gapMs", "expected"}
 )
+OPTIONAL_REVIEW_KEYS = frozenset({"leftCueId", "rightCueId", "reviewCategory"})
 LABELS = frozenset({"join", "break"})
-
 
 def _validate_example(value: Any, index: int) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"case {index} must be an object")
-    if set(value) != EXPECTED_KEYS:
-        missing = sorted(EXPECTED_KEYS - set(value))
-        extra = sorted(set(value) - EXPECTED_KEYS)
-        details = []
-        if missing:
-            details.append(f"missing={missing}")
-        if extra:
-            details.append(f"extra={extra}")
+    fields = set(value)
+    invalid_fields = fields - REQUIRED_KEYS - OPTIONAL_REVIEW_KEYS
+    missing = sorted(REQUIRED_KEYS - fields)
+    details = []
+    if missing:
+        details.append(f"missing={missing}")
+    if invalid_fields:
+        details.append(f"extra={sorted(invalid_fields)}")
+    if details:
         raise ValueError(f"case {index} has invalid fields ({', '.join(details)})")
 
     result = dict(value)
@@ -59,6 +60,9 @@ def _validate_example(value: Any, index: int) -> dict[str, Any]:
         raise ValueError(f"case {index} gapMs must be a non-negative integer")
     if result["expected"] not in LABELS:
         raise ValueError(f"case {index} expected must be one of {sorted(LABELS)}")
+    for field in OPTIONAL_REVIEW_KEYS & fields:
+        if not isinstance(result[field], str) or not result[field].strip():
+            raise ValueError(f"case {index} {field} must be non-empty text")
     return result
 
 
@@ -114,7 +118,7 @@ def _evaluate_case(
 
     decision = decisions[boundary_index]
     predicted = "join" if decision["decision"] == "join" else "break"
-    return {
+    result = {
         "case": index,
         "left": case["left"],
         "right": case["right"],
@@ -126,6 +130,9 @@ def _evaluate_case(
         "reason": decision["reason"],
         "correct": predicted == case["expected"],
     }
+    for field in OPTIONAL_REVIEW_KEYS & set(case):
+        result[field] = case[field]
+    return result
 
 
 def classify_boundary(

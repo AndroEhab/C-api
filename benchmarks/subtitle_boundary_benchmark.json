@@ -86,5 +86,755 @@
     "nextContext": [],
     "gapMs": 37000,
     "expected": "break"
+  },
+  {
+    "left": "The major Nancheng train accident three years ago",
+    "right": "you two were on that train.",
+    "previousContext": [
+      "No need to be nervous."
+    ],
+    "nextContext": [
+      "Yes."
+    ],
+    "gapMs": 880,
+    "expected": "join",
+    "leftCueId": "75",
+    "rightCueId": "76",
+    "reviewCategory": "clear_no_punctuation"
+  },
+  {
+    "left": "Heaven",
+    "right": "let me meet my sister in that accident.",
+    "previousContext": [
+      "A blessing in disguise."
+    ],
+    "nextContext": [
+      "If not for my sister"
+    ],
+    "gapMs": 40,
+    "expected": "join",
+    "leftCueId": "90",
+    "rightCueId": "91",
+    "reviewCategory": "clear_no_punctuation"
+  },
+  {
+    "left": "If not for my sister",
+    "right": "I can't go to a school for the blind either.",
+    "previousContext": [
+      "let me meet my sister in that accident."
+    ],
+    "nextContext": [
+      "Did you open the coffee shop together."
+    ],
+    "gapMs": 40,
+    "expected": "join",
+    "leftCueId": "92",
+    "rightCueId": "93",
+    "reviewCategory": "clear_no_punctuation"
+  },
+  {
+    "left": "My sister puts things in fixed places",
+    "right": "I know where they are by touch.",
+    "previousContext": [
+      "You can too."
+    ],
+    "nextContext": [
+      "Sir."
+    ],
+    "gapMs": 160,
+    "expected": "join",
+    "leftCueId": "97",
+    "rightCueId": "98",
+    "reviewCategory": "clear_no_punctuation"
+  },
+  {
+    "left": "Without solid evidence",
+    "right": "don't alert the enemy.",
+    "previousContext": [
+      "I think we can issue a warrant immediately."
+    ],
+    "nextContext": [
+      "Sir..."
+    ],
+    "gapMs": 210,
+    "expected": "join",
+    "leftCueId": "103",
+    "rightCueId": "104",
+    "reviewCategory": "clear_no_punctuation"
+  },
+  {
+    "left": "I don't want",
+    "right": "you to end up like your father.",
+    "previousContext": [
+      "If we don't investigate, who will."
+    ],
+    "nextContext": [
+      "He threw himself into cases"
+    ],
+    "gapMs": 330,
+    "expected": "join",
+    "leftCueId": "159",
+    "rightCueId": "160",
+    "reviewCategory": "clear_no_punctuation"
+  },
+  {
+    "left": "He threw himself into cases",
+    "right": "and lost his life.",
+    "previousContext": [
+      "you to end up like your father."
+    ],
+    "nextContext": [
+      "You're still young."
+    ],
+    "gapMs": 40,
+    "expected": "join",
+    "leftCueId": "161",
+    "rightCueId": "162",
+    "reviewCategory": "clear_no_punctuation"
+  },
+  {
+    "left": "If you don't come eat",
+    "right": "your guangbing will be in Mingzhu's belly.",
+    "previousContext": [
+      "It smells good."
+    ],
+    "nextContext": [
+      "I'm still cleaning the equipment, Mingzhu"
+    ],
+    "gapMs": 80,
+    "expected": "join",
+    "leftCueId": "185",
+    "rightCueId": "186",
+    "reviewCategory": "clear_no_punctuation"
+  },
+  {
+    "left": "They're also suspected of.",
+    "right": "Colluding with local criminal gangs",
+    "previousContext": [
+      "Leaving no survivors."
+    ],
+    "nextContext": [
+      "to carry out targeted assassinations."
+    ],
+    "gapMs": 24,
+    "expected": "join",
+    "leftCueId": "173",
+    "rightCueId": "174",
+    "reviewCategory": "incorrect_period"
+  },
+  {
+    "left": "Colluding with local criminal gangs",
+    "right": "to carry out targeted assassinations.",
+    "previousContext": [
+      "They're also suspected of."
+    ],
+    "nextContext": [
+      "Hello."
+    ],
+    "gapMs": 250,
+    "expected": "join",
+    "leftCueId": "174",
+    "rightCueId": "175",
+    "reviewCategory": "multi_cue_incorrect_period"
+  },
+  {
+    "left": "Do you remember.",
+    "right": "When we were at the orphanage",
+    "previousContext": [
+      "Sister."
+    ],
+    "nextContext": [
+      "I was always hungry."
+    ],
+    "gapMs": 920,
+    "expected": "join",
+    "leftCueId": "194",
+    "rightCueId": "195",
+    "reviewCategory": "incorrect_period"
+  },
+  {
+    "left": "It's someone named.",
+    "right": "Tide girl.",
+    "previousContext": [
+      "But Minghui's best friend isn't me."
+    ],
+    "nextContext": [
+      "Tide."
+    ],
+    "gapMs": 1000,
+    "expected": "join",
+    "leftCueId": "375",
+    "rightCueId": "376",
+    "reviewCategory": "incorrect_period"
+  },
+  {
+    "left": "But from that day on.",
+    "right": "I never truly lived again.",
+    "previousContext": [
+      "Minghui died for me."
+    ],
+    "nextContext": [
+      "Until I found you."
+    ],
+    "gapMs": 3540,
+    "expected": "break",
+    "leftCueId": "614",
+    "rightCueId": "615",
+    "reviewCategory": "invalid_large_gap_incorrect_period"
+  },
+  {
+    "left": "I wanted to surprise you",
+    "right": "I didn't expect this to happen.",
+    "previousContext": [
+      "Why are you home so early today."
+    ],
+    "nextContext": [
+      "Luckily the police came in time."
+    ],
+    "gapMs": 130,
+    "expected": "break",
+    "leftCueId": "113",
+    "rightCueId": "114",
+    "reviewCategory": "independent_without_punctuation"
+  },
+  {
+    "left": "What a coincidence",
+    "right": "I didn't expect to meet my sister's friend here.",
+    "previousContext": [
+      "Good job."
+    ],
+    "nextContext": [
+      "Me neither."
+    ],
+    "gapMs": 210,
+    "expected": "break",
+    "leftCueId": "371",
+    "rightCueId": "372",
+    "reviewCategory": "independent_without_punctuation"
+  },
+  {
+    "left": "I hope you'll always stay kind.",
+    "right": "Live happily every day.",
+    "previousContext": [
+      "would you have told me the truth."
+    ],
+    "nextContext": [
+      "I let you live"
+    ],
+    "gapMs": 2170,
+    "expected": "break",
+    "leftCueId": "620",
+    "rightCueId": "621",
+    "reviewCategory": "semantically_related_grammar_separate"
+  },
+  {
+    "left": "Minghui is my sister.",
+    "right": "So are you.",
+    "previousContext": [
+      "but to live like a human being."
+    ],
+    "nextContext": [
+      "You both are."
+    ],
+    "gapMs": 580,
+    "expected": "break",
+    "leftCueId": "625",
+    "rightCueId": "626",
+    "reviewCategory": "semantically_related_grammar_separate"
+  },
+  {
+    "left": "I have change too.",
+    "right": "He's already gone.",
+    "previousContext": [
+      "I'm here."
+    ],
+    "nextContext": [
+      "Let's go home."
+    ],
+    "gapMs": 1550,
+    "expected": "break",
+    "leftCueId": "132",
+    "rightCueId": "133",
+    "reviewCategory": "grammatically_compatible_semantically_unrelated"
+  },
+  {
+    "left": "Since he's on your turf.",
+    "right": "I assume you've taken care of him",
+    "previousContext": [
+      "Named Poison Rat."
+    ],
+    "nextContext": [
+      "I've heard you're the best."
+    ],
+    "gapMs": 591,
+    "expected": "break",
+    "leftCueId": "359",
+    "rightCueId": "360",
+    "reviewCategory": "semantically_related_grammar_separate"
+  },
+  {
+    "left": "You.",
+    "right": "Who are you guys.",
+    "previousContext": [
+      "True top."
+    ],
+    "nextContext": [
+      "Old Man's men."
+    ],
+    "gapMs": 1000,
+    "expected": "break",
+    "leftCueId": "12",
+    "rightCueId": "13",
+    "reviewCategory": "question_answer"
+  },
+  {
+    "left": "What are you doing.",
+    "right": "Cleaning up the trash.",
+    "previousContext": [
+      "Time to clean up the trash."
+    ],
+    "nextContext": [
+      "Bodies."
+    ],
+    "gapMs": 130,
+    "expected": "break",
+    "leftCueId": "19",
+    "rightCueId": "20",
+    "reviewCategory": "question_answer"
+  },
+  {
+    "left": "Are you okay.",
+    "right": "It's okay.",
+    "previousContext": [
+      "Sister."
+    ],
+    "nextContext": [
+      "Don't be afraid."
+    ],
+    "gapMs": 250,
+    "expected": "break",
+    "leftCueId": "69",
+    "rightCueId": "70",
+    "reviewCategory": "question_answer"
+  },
+  {
+    "left": "you two were on that train.",
+    "right": "Yes.",
+    "previousContext": [
+      "The major Nancheng train accident three years ago"
+    ],
+    "nextContext": [
+      "My sister saved thirteen people in the carriage."
+    ],
+    "gapMs": 1330,
+    "expected": "break",
+    "leftCueId": "76",
+    "rightCueId": "77",
+    "reviewCategory": "question_answer"
+  },
+  {
+    "left": "Did you open the coffee shop together.",
+    "right": "Yeah.",
+    "previousContext": [
+      "I can't go to a school for the blind either."
+    ],
+    "nextContext": [
+      "You can too."
+    ],
+    "gapMs": 250,
+    "expected": "break",
+    "leftCueId": "94",
+    "rightCueId": "95",
+    "reviewCategory": "question_answer"
+  },
+  {
+    "left": "Can we leave now.",
+    "right": "Yes.",
+    "previousContext": [
+      "Sir..."
+    ],
+    "nextContext": [
+      "Keep your phone on."
+    ],
+    "gapMs": 1920,
+    "expected": "break",
+    "leftCueId": "106",
+    "rightCueId": "107",
+    "reviewCategory": "question_answer"
+  },
+  {
+    "left": "You eat.",
+    "right": "Later I found out.",
+    "previousContext": [
+      "I'm full."
+    ],
+    "nextContext": [
+      "Those flatbreads"
+    ],
+    "gapMs": 670,
+    "expected": "break",
+    "leftCueId": "207",
+    "rightCueId": "208",
+    "reviewCategory": "same_speaker_adjacent_sentences"
+  },
+  {
+    "left": "It's late.",
+    "right": "Let's talk tomorrow.",
+    "previousContext": [
+      "she's alive."
+    ],
+    "nextContext": [
+      "Why the rush."
+    ],
+    "gapMs": 120,
+    "expected": "break",
+    "leftCueId": "384",
+    "rightCueId": "385",
+    "reviewCategory": "same_speaker_adjacent_sentences"
+  },
+  {
+    "left": "Next time.",
+    "right": "Now's fine.",
+    "previousContext": [
+      "You haven't finished your drink."
+    ],
+    "nextContext": [
+      "Sister."
+    ],
+    "gapMs": 540,
+    "expected": "break",
+    "leftCueId": "388",
+    "rightCueId": "389",
+    "reviewCategory": "same_speaker_adjacent_sentences"
+  },
+  {
+    "left": "The legislators are very satisfied with you.",
+    "right": "These campaign obstacles were all handled very smoothly.",
+    "previousContext": [
+      "Slow down."
+    ],
+    "nextContext": [
+      "But"
+    ],
+    "gapMs": 320,
+    "expected": "break",
+    "leftCueId": "299",
+    "rightCueId": "300",
+    "reviewCategory": "same_speaker_adjacent_sentences"
+  },
+  {
+    "left": "I'm still cleaning the equipment, Mingzhu",
+    "right": "I'll bring it down to you.",
+    "previousContext": [
+      "your guangbing will be in Mingzhu's belly."
+    ],
+    "nextContext": [
+      "Don't come down."
+    ],
+    "gapMs": 570,
+    "expected": "break",
+    "leftCueId": "187",
+    "rightCueId": "188",
+    "reviewCategory": "same_speaker_adjacent_sentences"
+  },
+  {
+    "left": "Class dismissed.",
+    "right": "Slow down.",
+    "previousContext": [
+      "everything is worth it."
+    ],
+    "nextContext": [
+      "The legislators are very satisfied with you."
+    ],
+    "gapMs": 1750,
+    "expected": "break",
+    "leftCueId": "297",
+    "rightCueId": "298",
+    "reviewCategory": "possible_speaker_change_unlabeled"
+  },
+  {
+    "left": "Long time no see.",
+    "right": "Minghui.",
+    "previousContext": [
+      "She helped me a lot."
+    ],
+    "nextContext": [
+      "Sister, look who's here."
+    ],
+    "gapMs": 1210,
+    "expected": "break",
+    "leftCueId": "346",
+    "rightCueId": "347",
+    "reviewCategory": "possible_speaker_change_unlabeled"
+  },
+  {
+    "left": "Let me help you.",
+    "right": "Thank you.",
+    "previousContext": [
+      "Little sister."
+    ],
+    "nextContext": [
+      "Thanks."
+    ],
+    "gapMs": 500,
+    "expected": "break",
+    "leftCueId": "367",
+    "rightCueId": "368",
+    "reviewCategory": "possible_speaker_change_unlabeled"
+  },
+  {
+    "left": "Good job.",
+    "right": "What a coincidence",
+    "previousContext": [
+      "Thanks."
+    ],
+    "nextContext": [
+      "I didn't expect to meet my sister's friend here."
+    ],
+    "gapMs": 1580,
+    "expected": "break",
+    "leftCueId": "370",
+    "rightCueId": "371",
+    "reviewCategory": "possible_speaker_change_unlabeled"
+  },
+  {
+    "left": "Don't worry",
+    "right": "I snuck out too.",
+    "previousContext": [
+      "Let's go check over there."
+    ],
+    "nextContext": [
+      "What do you want."
+    ],
+    "gapMs": 170,
+    "expected": "break",
+    "leftCueId": "411",
+    "rightCueId": "412",
+    "reviewCategory": "possible_speaker_change_unlabeled"
+  },
+  {
+    "left": "Then from now on",
+    "right": "I'll be your sister.",
+    "previousContext": [
+      "Where's your family."
+    ],
+    "nextContext": [
+      "We grew up together."
+    ],
+    "gapMs": 1580,
+    "expected": "join",
+    "leftCueId": "282",
+    "rightCueId": "283",
+    "reviewCategory": "valid_join_gap_1.5_2.5s"
+  },
+  {
+    "left": "At first, I followed Old Man down this path",
+    "right": "thinking I was upholding justice.",
+    "previousContext": [
+      "What about you."
+    ],
+    "nextContext": [
+      "In the end, I realized I was just a fool"
+    ],
+    "gapMs": 1540,
+    "expected": "join",
+    "leftCueId": "454",
+    "rightCueId": "455",
+    "reviewCategory": "valid_join_gap_1.5_2.5s"
+  },
+  {
+    "left": "What do I have to do",
+    "right": "for you to let Tide go.",
+    "previousContext": [
+      "Old Man."
+    ],
+    "nextContext": [
+      "I'm begging you."
+    ],
+    "gapMs": 1740,
+    "expected": "join",
+    "leftCueId": "603",
+    "rightCueId": "604",
+    "reviewCategory": "valid_join_gap_1.5_2.5s"
+  },
+  {
+    "left": "A bunch of kids—what threat are they.",
+    "right": "Being alive is a threat.",
+    "previousContext": [
+      "Old Man's rule: Leave no loose ends."
+    ],
+    "nextContext": [
+      "If other traffickers catch 'em."
+    ],
+    "gapMs": 2500,
+    "expected": "break",
+    "leftCueId": "26",
+    "rightCueId": "27",
+    "reviewCategory": "invalid_medium_gap"
+  },
+  {
+    "left": "I think we can issue a warrant immediately.",
+    "right": "Without solid evidence",
+    "previousContext": [
+      "The one who escaped is Poison Rat"
+    ],
+    "nextContext": [
+      "don't alert the enemy."
+    ],
+    "gapMs": 2280,
+    "expected": "break",
+    "leftCueId": "102",
+    "rightCueId": "103",
+    "reviewCategory": "invalid_medium_gap"
+  },
+  {
+    "left": "thinking I was upholding justice.",
+    "right": "In the end, I realized I was just a fool",
+    "previousContext": [
+      "At first, I followed Old Man down this path"
+    ],
+    "nextContext": [
+      "being played by others."
+    ],
+    "gapMs": 2340,
+    "expected": "break",
+    "leftCueId": "455",
+    "rightCueId": "456",
+    "reviewCategory": "invalid_medium_gap"
+  },
+  {
+    "left": "If you let Tide go.",
+    "right": "I'll do anything.",
+    "previousContext": [
+      "Old Man."
+    ],
+    "nextContext": [
+      "Old Man."
+    ],
+    "gapMs": 2920,
+    "expected": "break",
+    "leftCueId": "598",
+    "rightCueId": "599",
+    "reviewCategory": "invalid_large_gap"
+  },
+  {
+    "left": "If you'll let Tide go.",
+    "right": "I'll never speak again.",
+    "previousContext": [
+      "You talk too much."
+    ],
+    "nextContext": [
+      "Congratulations."
+    ],
+    "gapMs": 3170,
+    "expected": "break",
+    "leftCueId": "608",
+    "rightCueId": "609",
+    "reviewCategory": "invalid_large_gap"
+  },
+  {
+    "left": "Than live in pain.",
+    "right": "Touch bomb—one touch and it blows.",
+    "previousContext": [
+      "Better to die quick."
+    ],
+    "nextContext": [
+      "Break Old Man's rules, and we all die."
+    ],
+    "gapMs": 2620,
+    "expected": "break",
+    "leftCueId": "31",
+    "rightCueId": "32",
+    "reviewCategory": "invalid_large_gap"
+  },
+  {
+    "left": "Police suspect a professional",
+    "right": "assassin organization",
+    "previousContext": [
+      "There have been multiple homicides in the city recently."
+    ],
+    "nextContext": [
+      "is behind these murders."
+    ],
+    "gapMs": 24,
+    "expected": "join",
+    "leftCueId": "168",
+    "rightCueId": "169",
+    "reviewCategory": "multi_cue_sentence"
+  },
+  {
+    "left": "assassin organization",
+    "right": "is behind these murders.",
+    "previousContext": [
+      "Police suspect a professional"
+    ],
+    "nextContext": [
+      "The organization uses cruel methods."
+    ],
+    "gapMs": 24,
+    "expected": "join",
+    "leftCueId": "169",
+    "rightCueId": "170",
+    "reviewCategory": "multi_cue_sentence"
+  },
+  {
+    "left": "As soon as I got to the station",
+    "right": "I found your siste",
+    "previousContext": [
+      "I'm here to pick up my sister."
+    ],
+    "nextContext": [
+      "delirious in the office."
+    ],
+    "gapMs": 260,
+    "expected": "join",
+    "leftCueId": "531",
+    "rightCueId": "532",
+    "reviewCategory": "multi_cue_sentence"
+  },
+  {
+    "left": "I found your siste",
+    "right": "delirious in the office.",
+    "previousContext": [
+      "As soon as I got to the station"
+    ],
+    "nextContext": [
+      "She kept calling for her sister."
+    ],
+    "gapMs": 24,
+    "expected": "join",
+    "leftCueId": "532",
+    "rightCueId": "533",
+    "reviewCategory": "multi_cue_sentence"
+  },
+  {
+    "left": "Our goal is to become.",
+    "right": "The deadliest weapons in the world.",
+    "previousContext": [
+      "Excellent."
+    ],
+    "nextContext": [
+      "The most elite and capable."
+    ],
+    "gapMs": 24,
+    "expected": "join",
+    "leftCueId": "241",
+    "rightCueId": "242",
+    "reviewCategory": "multi_cue_sentence"
+  },
+  {
+    "left": "The deadliest weapons in the world.",
+    "right": "The most elite and capable.",
+    "previousContext": [
+      "Our goal is to become."
+    ],
+    "nextContext": [
+      "This is the only way"
+    ],
+    "gapMs": 750,
+    "expected": "join",
+    "leftCueId": "242",
+    "rightCueId": "243",
+    "reviewCategory": "multi_cue_sentence"
   }
 ]
