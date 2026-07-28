@@ -1,6 +1,6 @@
 {
-  "frozen": false,
-  "commitSha": null,
-  "frozenAt": null,
-  "notes": ""
+  "frozen": true,
+  "commitSha": "dc9bdb69b80ab6d22037097dce429334ae09da2f",
+  "frozenAt": "2026-07-28T16:25:31.135529Z",
+  "notes": "Neutral Spanish policy frozen after Task 8D development evaluation. No production tuning was applied before held-out test evaluation."
 }
