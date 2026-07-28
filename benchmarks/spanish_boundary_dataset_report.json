@@ -20,8 +20,8 @@
       "contentStructure": "monologue",
       "originalSpokenLanguage": "en",
       "spanishVariant": "unknown",
-      "sourceQualityTier": "professional_translation",
-      "translationType": "professional-human",
+      "sourceQualityTier": "community_translation",
+      "translationType": "community-human",
       "candidatesInBenchmark": 140
     },
     {
@@ -38,15 +38,16 @@
   "overview": {
     "totalCandidates": 250,
     "totalSources": 3,
-    "devCount": 177,
-    "testCount": 73,
-    "devRatio": 0.708,
+    "devCount": 176,
+    "testCount": 74,
+    "devRatio": 0.704,
     "unreviewed": 250,
-    "multilineCues": 124,
-    "multilineLeft": 78,
-    "multilineRight": 87,
+    "humanLabeledCount": 0,
+    "multilineCues": 130,
+    "multilineLeft": 79,
+    "multilineRight": 90,
     "multipleSpeakerCues": 14,
-    "chainCount": 17
+    "chainCount": 18
   },
   "reviewProgress": {
     "unreviewed": 250,
@@ -70,9 +71,8 @@
       "film": 55
     },
     "candidatesPerQualityTier": {
-      "professional_translation": 140,
-      "native_original": 55,
-      "community_translation": 55
+      "community_translation": 195,
+      "native_original": 55
     },
     "candidatesPerContentStructure": {
       "monologue": 195,
@@ -85,49 +85,49 @@
     }
   },
   "samplingTagCounts": {
-    "independent_utterance": 94,
-    "join_like": 84,
-    "inverted_question": 17,
-    "misleading_period": 16,
-    "caption": 16,
+    "independent_utterance": 101,
+    "join_like": 73,
+    "inverted_question": 18,
+    "misleading_period": 18,
+    "caption": 18,
     "dialogue_dash": 13,
     "unknown_speaker_turn": 13,
-    "ellipsis_or_interruption": 9,
     "inverted_exclamation": 9,
-    "short_response": 8
+    "short_response": 8,
+    "ellipsis_or_interruption": 8
   },
   "timingBandCounts": {
-    "0-100ms": 149,
-    "501-1500ms": 47,
-    "1501-3000ms": 19,
-    "3000+ms": 14,
-    "301-500ms": 12,
+    "0-100ms": 143,
+    "501-1500ms": 50,
+    "1501-3000ms": 18,
+    "3000+ms": 16,
+    "301-500ms": 14,
     "101-300ms": 9
   },
   "devTestCoverage": {
-    "devCount": 177,
-    "testCount": 73,
+    "devCount": 176,
+    "testCount": 74,
     "devTagCoverage": {
       "independent_utterance": 64,
-      "join_like": 64,
-      "inverted_question": 12,
-      "misleading_period": 12,
-      "caption": 12,
+      "join_like": 62,
+      "misleading_period": 15,
+      "inverted_question": 13,
+      "caption": 13,
       "dialogue_dash": 9,
       "unknown_speaker_turn": 9,
       "inverted_exclamation": 7,
-      "ellipsis_or_interruption": 6,
+      "ellipsis_or_interruption": 5,
       "short_response": 2
     },
     "testTagCoverage": {
-      "independent_utterance": 30,
-      "join_like": 20,
+      "independent_utterance": 37,
+      "join_like": 11,
       "short_response": 6,
       "inverted_question": 5,
-      "caption": 4,
-      "misleading_period": 4,
+      "caption": 5,
       "dialogue_dash": 4,
       "unknown_speaker_turn": 4,
+      "misleading_period": 3,
       "ellipsis_or_interruption": 3,
       "inverted_exclamation": 2
     }
@@ -154,6 +154,10 @@
     "contentStructures": [
       "dialogue",
       "monologue"
-    ]
+    ],
+    "reviewedJoin": 0,
+    "reviewedBreak": 0,
+    "adjudicatedCount": 0,
+    "isFrozen": false
   }
 }

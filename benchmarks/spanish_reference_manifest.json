@@ -2,66 +2,6 @@
   {
     "sourceId": "ted_creativity_es",
     "sourceChecksum": "7280c75463dc8baf",
-    "cueId": "1",
-    "rawText": "Buenos días. ¿Cómo están?",
-    "lines": [
-      "Buenos días. ¿Cómo están?"
-    ],
-    "text": "Buenos días. ¿Cómo están?",
-    "startMs": 1900,
-    "endMs": 5330,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_creativity_es",
-    "sourceChecksum": "7280c75463dc8baf",
-    "cueId": "2",
-    "rawText": "Ha sido increíble, ¿verdad?",
-    "lines": [
-      "Ha sido increíble, ¿verdad?"
-    ],
-    "text": "Ha sido increíble, ¿verdad?",
-    "startMs": 6000,
-    "endMs": 7580,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_creativity_es",
-    "sourceChecksum": "7280c75463dc8baf",
-    "cueId": "3",
-    "rawText": "Estoy abrumado con todo esto.",
-    "lines": [
-      "Estoy abrumado con todo esto."
-    ],
-    "text": "Estoy abrumado con todo esto.",
-    "startMs": 8470,
-    "endMs": 11000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_creativity_es",
-    "sourceChecksum": "7280c75463dc8baf",
-    "cueId": "4",
-    "rawText": "De hecho, me estoy yendo.",
-    "lines": [
-      "De hecho, me estoy yendo."
-    ],
-    "text": "De hecho, me estoy yendo.",
-    "startMs": 11000,
-    "endMs": 12870,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_creativity_es",
-    "sourceChecksum": "7280c75463dc8baf",
     "cueId": "5",
     "rawText": "(Risas)",
     "lines": [
@@ -3726,6 +3666,36 @@
   {
     "sourceId": "ted_creativity_es",
     "sourceChecksum": "7280c75463dc8baf",
+    "cueId": "243",
+    "rawText": "En el mundo, no habían sistemas educativos",
+    "lines": [
+      "En el mundo, no habían sistemas educativos"
+    ],
+    "text": "En el mundo, no habían sistemas educativos",
+    "startMs": 658000,
+    "endMs": 660000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_creativity_es",
+    "sourceChecksum": "7280c75463dc8baf",
+    "cueId": "244",
+    "rawText": "antes del siglo XIX.",
+    "lines": [
+      "antes del siglo XIX."
+    ],
+    "text": "antes del siglo XIX.",
+    "startMs": 660000,
+    "endMs": 661940,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_creativity_es",
+    "sourceChecksum": "7280c75463dc8baf",
     "cueId": "245",
     "rawText": "Todos surgieron para satisfacer\nlas necesidades de la industrialización.",
     "lines": [
@@ -4254,6 +4224,51 @@
     "text": "Pero ahora los jóvenes con títulos muchas veces vuelven a sus casas",
     "startMs": 746580,
     "endMs": 750550,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_creativity_es",
+    "sourceChecksum": "7280c75463dc8baf",
+    "cueId": "279",
+    "rawText": "para seguir jugando video juegos,",
+    "lines": [
+      "para seguir jugando video juegos,"
+    ],
+    "text": "para seguir jugando video juegos,",
+    "startMs": 750550,
+    "endMs": 752140,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_creativity_es",
+    "sourceChecksum": "7280c75463dc8baf",
+    "cueId": "280",
+    "rawText": "porque necesitas una maestría",
+    "lines": [
+      "porque necesitas una maestría"
+    ],
+    "text": "porque necesitas una maestría",
+    "startMs": 752140,
+    "endMs": 753630,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_creativity_es",
+    "sourceChecksum": "7280c75463dc8baf",
+    "cueId": "281",
+    "rawText": "cuando antes requerías un bachillerato.",
+    "lines": [
+      "cuando antes requerías un bachillerato."
+    ],
+    "text": "cuando antes requerías un bachillerato.",
+    "startMs": 753630,
+    "endMs": 755510,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -5172,22 +5187,6 @@
     "containsMultipleSpeakers": false
   },
   {
-    "sourceId": "ted_creativity_es",
-    "sourceChecksum": "7280c75463dc8baf",
-    "cueId": "341",
-    "rawText": "¿La conocen?\nAlgunos sí.",
-    "lines": [
-      "¿La conocen?",
-      "Algunos sí."
-    ],
-    "text": "¿La conocen? Algunos sí.",
-    "startMs": 898480,
-    "endMs": 900160,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
     "cueId": "6",
@@ -5303,51 +5302,6 @@
     "text": "Estoy consciente del misterio que nos rodea,",
     "startMs": 44000,
     "endMs": 46000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "14",
-    "rawText": "así que escribo sobre coincidencias, premoniciones,",
-    "lines": [
-      "así que escribo sobre coincidencias, premoniciones,"
-    ],
-    "text": "así que escribo sobre coincidencias, premoniciones,",
-    "startMs": 47000,
-    "endMs": 49000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "15",
-    "rawText": "emociones, sueños, el poder de la naturaleza, la magia.",
-    "lines": [
-      "emociones, sueños, el poder de la naturaleza, la magia."
-    ],
-    "text": "emociones, sueños, el poder de la naturaleza, la magia.",
-    "startMs": 50000,
-    "endMs": 54000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "16",
-    "rawText": "En los últimos 20 años he publicado algunos libros,",
-    "lines": [
-      "En los últimos 20 años he publicado algunos libros,"
-    ],
-    "text": "En los últimos 20 años he publicado algunos libros,",
-    "startMs": 56000,
-    "endMs": 59000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -6210,14 +6164,14 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "89",
-    "rawText": "que yo anticipaba. Realmente no estaba mal.",
+    "cueId": "80",
+    "rawText": "Cuando ella tenía 14 años, su abuelo la vendió a un burdel.",
     "lines": [
-      "que yo anticipaba. Realmente no estaba mal."
+      "Cuando ella tenía 14 años, su abuelo la vendió a un burdel."
     ],
-    "text": "que yo anticipaba. Realmente no estaba mal.",
-    "startMs": 285000,
-    "endMs": 288000,
+    "text": "Cuando ella tenía 14 años, su abuelo la vendió a un burdel.",
+    "startMs": 253000,
+    "endMs": 257000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -6225,14 +6179,14 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "90",
-    "rawText": "Yo me veía como un refrigerador.",
+    "cueId": "81",
+    "rawText": "Ella nos contó de niñas violadas por hombres que creen que",
     "lines": [
-      "Yo me veía como un refrigerador."
+      "Ella nos contó de niñas violadas por hombres que creen que"
     ],
-    "text": "Yo me veía como un refrigerador.",
-    "startMs": 288000,
-    "endMs": 289000,
+    "text": "Ella nos contó de niñas violadas por hombres que creen que",
+    "startMs": 258000,
+    "endMs": 262000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -6240,14 +6194,74 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "91",
-    "rawText": "(risas)",
+    "cueId": "82",
+    "rawText": "tener sexo con una virgen muy joven los va a curar del SIDA.",
     "lines": [
-      "(risas)"
+      "tener sexo con una virgen muy joven los va a curar del SIDA."
     ],
-    "text": "(risas)",
-    "startMs": 290000,
-    "endMs": 291000,
+    "text": "tener sexo con una virgen muy joven los va a curar del SIDA.",
+    "startMs": 262000,
+    "endMs": 265000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "83",
+    "rawText": "Y de burdeles donde las niñas son forzadas a recibir de cinco,",
+    "lines": [
+      "Y de burdeles donde las niñas son forzadas a recibir de cinco,"
+    ],
+    "text": "Y de burdeles donde las niñas son forzadas a recibir de cinco,",
+    "startMs": 266000,
+    "endMs": 270000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "84",
+    "rawText": "a 15 clientes por día,",
+    "lines": [
+      "a 15 clientes por día,"
+    ],
+    "text": "a 15 clientes por día,",
+    "startMs": 270000,
+    "endMs": 272000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "85",
+    "rawText": "y si se rebelan, las torturan con electricidad.",
+    "lines": [
+      "y si se rebelan, las torturan con electricidad."
+    ],
+    "text": "y si se rebelan, las torturan con electricidad.",
+    "startMs": 272000,
+    "endMs": 275000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "86",
+    "rawText": "En la sala verde recibí mi uniforme.",
+    "lines": [
+      "En la sala verde recibí mi uniforme."
+    ],
+    "text": "En la sala verde recibí mi uniforme.",
+    "startMs": 277000,
+    "endMs": 279000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -6495,21 +6509,6 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "108",
-    "rawText": "(risas)",
-    "lines": [
-      "(risas)"
-    ],
-    "text": "(risas)",
-    "startMs": 338000,
-    "endMs": 340000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
     "cueId": "112",
     "rawText": "a propósito, es la misma música que ponen aquí,",
     "lines": [
@@ -6713,111 +6712,6 @@
     "text": "aparezco también yo, aunque casi siempre entre las piernas de Sofia.",
     "startMs": 386000,
     "endMs": 390000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "133",
-    "rawText": "aunque yo le he explicado que lo que hacemos en privado",
-    "lines": [
-      "aunque yo le he explicado que lo que hacemos en privado"
-    ],
-    "text": "aunque yo le he explicado que lo que hacemos en privado",
-    "startMs": 407000,
-    "endMs": 410000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "134",
-    "rawText": "en general toma menos de 4 minutos,",
-    "lines": [
-      "en general toma menos de 4 minutos,"
-    ],
-    "text": "en general toma menos de 4 minutos,",
-    "startMs": 410000,
-    "endMs": 412000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "135",
-    "rawText": "(risas)",
-    "lines": [
-      "(risas)"
-    ],
-    "text": "(risas)",
-    "startMs": 412000,
-    "endMs": 413000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "136",
-    "rawText": "así que no debería tomárselo personalmente.",
-    "lines": [
-      "así que no debería tomárselo personalmente."
-    ],
-    "text": "así que no debería tomárselo personalmente.",
-    "startMs": 413000,
-    "endMs": 415000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "137",
-    "rawText": "Tengo todos los recortes de prensa de esos magníficos 4 minutos,",
-    "lines": [
-      "Tengo todos los recortes de prensa de esos magníficos 4 minutos,"
-    ],
-    "text": "Tengo todos los recortes de prensa de esos magníficos 4 minutos,",
-    "startMs": 416000,
-    "endMs": 420000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "138",
-    "rawText": "porque no quiero olvidarlos",
-    "lines": [
-      "porque no quiero olvidarlos"
-    ],
-    "text": "porque no quiero olvidarlos",
-    "startMs": 420000,
-    "endMs": 422000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "139",
-    "rawText": "cuando la vejez destruya mis neuronas.",
-    "lines": [
-      "cuando la vejez destruya mis neuronas."
-    ],
-    "text": "cuando la vejez destruya mis neuronas.",
-    "startMs": 422000,
-    "endMs": 425000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -7110,14 +7004,14 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "176",
-    "rawText": "He trabajado con mujeres y para mujeres toda mi vida.",
+    "cueId": "159",
+    "rawText": "Les da los nombres de los comandantes del campamento",
     "lines": [
-      "He trabajado con mujeres y para mujeres toda mi vida."
+      "Les da los nombres de los comandantes del campamento"
     ],
-    "text": "He trabajado con mujeres y para mujeres toda mi vida.",
-    "startMs": 549000,
-    "endMs": 551000,
+    "text": "Les da los nombres de los comandantes del campamento",
+    "startMs": 486000,
+    "endMs": 489000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -7125,14 +7019,14 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "177",
-    "rawText": "Las conozco bien.",
+    "cueId": "160",
+    "rawText": "para agradarlos, y los alimenta con te negro",
     "lines": [
-      "Las conozco bien."
+      "para agradarlos, y los alimenta con te negro"
     ],
-    "text": "Las conozco bien.",
-    "startMs": 552000,
-    "endMs": 553000,
+    "text": "para agradarlos, y los alimenta con te negro",
+    "startMs": 489000,
+    "endMs": 492000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -7140,14 +7034,14 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "178",
-    "rawText": "Yo nací en tiempos antiguos, en el fin del mundo,",
+    "cueId": "161",
+    "rawText": "porque su leche no puede sustentarlos.",
     "lines": [
-      "Yo nací en tiempos antiguos, en el fin del mundo,"
+      "porque su leche no puede sustentarlos."
     ],
-    "text": "Yo nací en tiempos antiguos, en el fin del mundo,",
-    "startMs": 554000,
-    "endMs": 557000,
+    "text": "porque su leche no puede sustentarlos.",
+    "startMs": 493000,
+    "endMs": 495000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -7155,14 +7049,14 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "179",
-    "rawText": "dentro de una familia patriarcal, católica y conservadora.",
+    "cueId": "163",
+    "rawText": "ella la agarra y rehusa soltarla,",
     "lines": [
-      "dentro de una familia patriarcal, católica y conservadora."
+      "ella la agarra y rehusa soltarla,"
     ],
-    "text": "dentro de una familia patriarcal, católica y conservadora.",
-    "startMs": 558000,
-    "endMs": 561000,
+    "text": "ella la agarra y rehusa soltarla,",
+    "startMs": 499000,
+    "endMs": 502000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -7170,14 +7064,14 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "180",
-    "rawText": "No es ninguna sorpresa que ya a los 5 años fuera una feminista furiosa",
+    "cueId": "164",
+    "rawText": "aún cuando le apuntan un arma a su cabeza.",
     "lines": [
-      "No es ninguna sorpresa que ya a los 5 años fuera una feminista furiosa"
+      "aún cuando le apuntan un arma a su cabeza."
     ],
-    "text": "No es ninguna sorpresa que ya a los 5 años fuera una feminista furiosa",
-    "startMs": 562000,
-    "endMs": 565000,
+    "text": "aún cuando le apuntan un arma a su cabeza.",
+    "startMs": 502000,
+    "endMs": 504000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -7185,14 +7079,89 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "181",
-    "rawText": "aunque el término no había llegado todavía a Chile,",
+    "cueId": "165",
+    "rawText": "De alguna manera la familia sobrevive por 16 meses,",
     "lines": [
-      "aunque el término no había llegado todavía a Chile,"
+      "De alguna manera la familia sobrevive por 16 meses,"
     ],
-    "text": "aunque el término no había llegado todavía a Chile,",
-    "startMs": 566000,
-    "endMs": 568000,
+    "text": "De alguna manera la familia sobrevive por 16 meses,",
+    "startMs": 506000,
+    "endMs": 509000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "166",
+    "rawText": "y luego, con una suerte extraordinaria, y gracias al corazón apasionado",
+    "lines": [
+      "y luego, con una suerte extraordinaria, y gracias al corazón apasionado"
+    ],
+    "text": "y luego, con una suerte extraordinaria, y gracias al corazón apasionado",
+    "startMs": 510000,
+    "endMs": 514000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "167",
+    "rawText": "de un joven norteamericano, Sasha Chanoff,",
+    "lines": [
+      "de un joven norteamericano, Sasha Chanoff,"
+    ],
+    "text": "de un joven norteamericano, Sasha Chanoff,",
+    "startMs": 514000,
+    "endMs": 518000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "168",
+    "rawText": "que logra subirla a un avión de rescate de EEUU,",
+    "lines": [
+      "que logra subirla a un avión de rescate de EEUU,"
+    ],
+    "text": "que logra subirla a un avión de rescate de EEUU,",
+    "startMs": 519000,
+    "endMs": 522000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "169",
+    "rawText": "Rose Mapendo y sus 9 hijos llegan a Phoenix, en Arizona,",
+    "lines": [
+      "Rose Mapendo y sus 9 hijos llegan a Phoenix, en Arizona,"
+    ],
+    "text": "Rose Mapendo y sus 9 hijos llegan a Phoenix, en Arizona,",
+    "startMs": 523000,
+    "endMs": 528000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "170",
+    "rawText": "donde hoy viven y prosperan.",
+    "lines": [
+      "donde hoy viven y prosperan."
+    ],
+    "text": "donde hoy viven y prosperan.",
+    "startMs": 528000,
+    "endMs": 530000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -7425,6 +7394,36 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "197",
+    "rawText": "No tienen control sobre sus cuerpos o sus vidas.",
+    "lines": [
+      "No tienen control sobre sus cuerpos o sus vidas."
+    ],
+    "text": "No tienen control sobre sus cuerpos o sus vidas.",
+    "startMs": 616000,
+    "endMs": 619000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "198",
+    "rawText": "No tienen ni educación ni libertad.",
+    "lines": [
+      "No tienen ni educación ni libertad."
+    ],
+    "text": "No tienen ni educación ni libertad.",
+    "startMs": 619000,
+    "endMs": 622000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
     "cueId": "199",
     "rawText": "Ellas son violadas, golpeadas y, a veces, asesinadas con impunidad.",
     "lines": [
@@ -7583,81 +7582,6 @@
     "text": "Llámenlo Afrodita o Venus o lo que quieran,",
     "startMs": 649000,
     "endMs": 654000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "210",
-    "rawText": "el nombre no importa,",
-    "lines": [
-      "el nombre no importa,"
-    ],
-    "text": "el nombre no importa,",
-    "startMs": 654000,
-    "endMs": 655000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "211",
-    "rawText": "mientras sigamos entendiendo de qué se trata, y que lo apoyemos.",
-    "lines": [
-      "mientras sigamos entendiendo de qué se trata, y que lo apoyemos."
-    ],
-    "text": "mientras sigamos entendiendo de qué se trata, y que lo apoyemos.",
-    "startMs": 655000,
-    "endMs": 658000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "212",
-    "rawText": "Tengo otra historia de pasión, y esta es triste.",
-    "lines": [
-      "Tengo otra historia de pasión, y esta es triste."
-    ],
-    "text": "Tengo otra historia de pasión, y esta es triste.",
-    "startMs": 659000,
-    "endMs": 662000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "213",
-    "rawText": "El lugar es una pequeña clínica para mujeres en un pueblo en Bangladesh",
-    "lines": [
-      "El lugar es una pequeña clínica para mujeres en un pueblo en Bangladesh"
-    ],
-    "text": "El lugar es una pequeña clínica para mujeres en un pueblo en Bangladesh",
-    "startMs": 664000,
-    "endMs": 668000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "214",
-    "rawText": "El año es 2005.",
-    "lines": [
-      "El año es 2005."
-    ],
-    "text": "El año es 2005.",
-    "startMs": 668000,
-    "endMs": 670000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -7853,6 +7777,66 @@
     "text": "Jenny tiene un corazón valiente y apasionado.",
     "startMs": 717000,
     "endMs": 720000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "231",
+    "rawText": "Murmura una plegaria y sigue adelante con la operación.",
+    "lines": [
+      "Murmura una plegaria y sigue adelante con la operación."
+    ],
+    "text": "Murmura una plegaria y sigue adelante con la operación.",
+    "startMs": 721000,
+    "endMs": 724000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "232",
+    "rawText": "Al final, la paciente aliviada le besa las manos.",
+    "lines": [
+      "Al final, la paciente aliviada le besa las manos."
+    ],
+    "text": "Al final, la paciente aliviada le besa las manos.",
+    "startMs": 725000,
+    "endMs": 728000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "233",
+    "rawText": "Ese día la asistente dental extrae muchos más dientes.",
+    "lines": [
+      "Ese día la asistente dental extrae muchos más dientes."
+    ],
+    "text": "Ese día la asistente dental extrae muchos más dientes.",
+    "startMs": 729000,
+    "endMs": 732000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "234",
+    "rawText": "A la mañana siguiente, cuando llega a la supuesta clínica,",
+    "lines": [
+      "A la mañana siguiente, cuando llega a la supuesta clínica,"
+    ],
+    "text": "A la mañana siguiente, cuando llega a la supuesta clínica,",
+    "startMs": 733000,
+    "endMs": 737000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -8078,6 +8062,51 @@
     "text": "si es que se les paga algo, y se mantienen vulnerables",
     "startMs": 786000,
     "endMs": 789000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "250",
+    "rawText": "porque no tienen independencia económica,",
+    "lines": [
+      "porque no tienen independencia económica,"
+    ],
+    "text": "porque no tienen independencia económica,",
+    "startMs": 790000,
+    "endMs": 792000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "253",
+    "rawText": "Es un hecho que darle educación y trabajo a las mujeres,",
+    "lines": [
+      "Es un hecho que darle educación y trabajo a las mujeres,"
+    ],
+    "text": "Es un hecho que darle educación y trabajo a las mujeres,",
+    "startMs": 797000,
+    "endMs": 800000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "254",
+    "rawText": "la habilidad de controlar sus ingresos,",
+    "lines": [
+      "la habilidad de controlar sus ingresos,"
+    ],
+    "text": "la habilidad de controlar sus ingresos,",
+    "startMs": 800000,
+    "endMs": 802000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -8385,126 +8414,6 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "275",
-    "rawText": "más que la tecnología, el diseño y el entretenimiento.",
-    "lines": [
-      "más que la tecnología, el diseño y el entretenimiento."
-    ],
-    "text": "más que la tecnología, el diseño y el entretenimiento.",
-    "startMs": 861000,
-    "endMs": 865000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "277",
-    "rawText": "vinculadas entre sí, informadas y educadas,",
-    "lines": [
-      "vinculadas entre sí, informadas y educadas,"
-    ],
-    "text": "vinculadas entre sí, informadas y educadas,",
-    "startMs": 869000,
-    "endMs": 871000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "278",
-    "rawText": "pueden traer paz y prosperidad a este planeta sin esperanzas.",
-    "lines": [
-      "pueden traer paz y prosperidad a este planeta sin esperanzas."
-    ],
-    "text": "pueden traer paz y prosperidad a este planeta sin esperanzas.",
-    "startMs": 871000,
-    "endMs": 875000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "279",
-    "rawText": "En cualquier guerra hoy, la mayoría de las bajas son civiles,",
-    "lines": [
-      "En cualquier guerra hoy, la mayoría de las bajas son civiles,"
-    ],
-    "text": "En cualquier guerra hoy, la mayoría de las bajas son civiles,",
-    "startMs": 876000,
-    "endMs": 880000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "280",
-    "rawText": "la mayoría mujeres y niños. Ellos son daño colateral.",
-    "lines": [
-      "la mayoría mujeres y niños. Ellos son daño colateral."
-    ],
-    "text": "la mayoría mujeres y niños. Ellos son daño colateral.",
-    "startMs": 880000,
-    "endMs": 883000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "281",
-    "rawText": "Los hombres manejan el mundo y miren el caos que tenemos.",
-    "lines": [
-      "Los hombres manejan el mundo y miren el caos que tenemos."
-    ],
-    "text": "Los hombres manejan el mundo y miren el caos que tenemos.",
-    "startMs": 884000,
-    "endMs": 887000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "282",
-    "rawText": "¿Qué clase de mundo queremos?",
-    "lines": [
-      "¿Qué clase de mundo queremos?"
-    ],
-    "text": "¿Qué clase de mundo queremos?",
-    "startMs": 888000,
-    "endMs": 890000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "283",
-    "rawText": "Esta es una pregunta fundamental que la mayoría nos estamos preguntando.",
-    "lines": [
-      "Esta es una pregunta fundamental que la mayoría nos estamos preguntando."
-    ],
-    "text": "Esta es una pregunta fundamental que la mayoría nos estamos preguntando.",
-    "startMs": 890000,
-    "endMs": 894000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
     "cueId": "284",
     "rawText": "¿Tiene sentido participar en la estructura mundial actual?",
     "lines": [
@@ -8685,6 +8594,231 @@
   {
     "sourceId": "ted_tales_es",
     "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "296",
+    "rawText": "No he podido quitarme esas imágenes de la cabeza",
+    "lines": [
+      "No he podido quitarme esas imágenes de la cabeza"
+    ],
+    "text": "No he podido quitarme esas imágenes de la cabeza",
+    "startMs": 934000,
+    "endMs": 937000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "297",
+    "rawText": "o de mi corazón.",
+    "lines": [
+      "o de mi corazón."
+    ],
+    "text": "o de mi corazón.",
+    "startMs": 938000,
+    "endMs": 939000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "298",
+    "rawText": "Lo que más temo es el poder con impunidad.",
+    "lines": [
+      "Lo que más temo es el poder con impunidad."
+    ],
+    "text": "Lo que más temo es el poder con impunidad.",
+    "startMs": 940000,
+    "endMs": 943000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "299",
+    "rawText": "Le temo al abuso de poder y al poder de abusar.",
+    "lines": [
+      "Le temo al abuso de poder y al poder de abusar."
+    ],
+    "text": "Le temo al abuso de poder y al poder de abusar.",
+    "startMs": 944000,
+    "endMs": 946000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "300",
+    "rawText": "En nuestra especie, los machos alfa definen la realidad,",
+    "lines": [
+      "En nuestra especie, los machos alfa definen la realidad,"
+    ],
+    "text": "En nuestra especie, los machos alfa definen la realidad,",
+    "startMs": 947000,
+    "endMs": 950000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "301",
+    "rawText": "y fuerzan al resto de la manada a aceptar esa realidad",
+    "lines": [
+      "y fuerzan al resto de la manada a aceptar esa realidad"
+    ],
+    "text": "y fuerzan al resto de la manada a aceptar esa realidad",
+    "startMs": 950000,
+    "endMs": 953000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "302",
+    "rawText": "y a seguir las reglas.",
+    "lines": [
+      "y a seguir las reglas."
+    ],
+    "text": "y a seguir las reglas.",
+    "startMs": 953000,
+    "endMs": 954000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "303",
+    "rawText": "Las reglas cambian todo el tiempo, pero siempre los benefician,",
+    "lines": [
+      "Las reglas cambian todo el tiempo, pero siempre los benefician,"
+    ],
+    "text": "Las reglas cambian todo el tiempo, pero siempre los benefician,",
+    "startMs": 955000,
+    "endMs": 958000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "304",
+    "rawText": "y en este caso, el efecto del chorreo,",
+    "lines": [
+      "y en este caso, el efecto del chorreo,"
+    ],
+    "text": "y en este caso, el efecto del chorreo,",
+    "startMs": 958000,
+    "endMs": 960000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "305",
+    "rawText": "que no funciona en la economía, funciona perfectamente.",
+    "lines": [
+      "que no funciona en la economía, funciona perfectamente."
+    ],
+    "text": "que no funciona en la economía, funciona perfectamente.",
+    "startMs": 961000,
+    "endMs": 963000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "306",
+    "rawText": "El abusa chorrea desde la parte más alta de la escalera hacia abajo.",
+    "lines": [
+      "El abusa chorrea desde la parte más alta de la escalera hacia abajo."
+    ],
+    "text": "El abusa chorrea desde la parte más alta de la escalera hacia abajo.",
+    "startMs": 964000,
+    "endMs": 967000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "307",
+    "rawText": "Las mujeres y los niños, especialmente los pobres, están abajo.",
+    "lines": [
+      "Las mujeres y los niños, especialmente los pobres, están abajo."
+    ],
+    "text": "Las mujeres y los niños, especialmente los pobres, están abajo.",
+    "startMs": 968000,
+    "endMs": 971000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "308",
+    "rawText": "Incluso el más indigente de los hombres tiene a alguien para abusar,",
+    "lines": [
+      "Incluso el más indigente de los hombres tiene a alguien para abusar,"
+    ],
+    "text": "Incluso el más indigente de los hombres tiene a alguien para abusar,",
+    "startMs": 972000,
+    "endMs": 975000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "309",
+    "rawText": "una mujer o un niño.",
+    "lines": [
+      "una mujer o un niño."
+    ],
+    "text": "una mujer o un niño.",
+    "startMs": 975000,
+    "endMs": 977000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
+    "cueId": "310",
+    "rawText": "Estoy harta del poder que unos pocos ejercen sobre la mayoría,",
+    "lines": [
+      "Estoy harta del poder que unos pocos ejercen sobre la mayoría,"
+    ],
+    "text": "Estoy harta del poder que unos pocos ejercen sobre la mayoría,",
+    "startMs": 978000,
+    "endMs": 982000,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "ted_tales_es",
+    "sourceChecksum": "5cda4987c758fb81",
     "cueId": "311",
     "rawText": "a través del género, los ingresos, la raza, y la clase.",
     "lines": [
@@ -8753,51 +8887,6 @@
     "text": "en la administración del mundo.",
     "startMs": 993000,
     "endMs": 994000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "316",
-    "rawText": "Necesitamos un número crítico de mujeres en posiciones de poder,",
-    "lines": [
-      "Necesitamos un número crítico de mujeres en posiciones de poder,"
-    ],
-    "text": "Necesitamos un número crítico de mujeres en posiciones de poder,",
-    "startMs": 995000,
-    "endMs": 998000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "317",
-    "rawText": "y necesitamos cultivar la energía femenina de los hombres.",
-    "lines": [
-      "y necesitamos cultivar la energía femenina de los hombres."
-    ],
-    "text": "y necesitamos cultivar la energía femenina de los hombres.",
-    "startMs": 998000,
-    "endMs": 1001000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "ted_tales_es",
-    "sourceChecksum": "5cda4987c758fb81",
-    "cueId": "318",
-    "rawText": "Estoy hablando de hombres con mentes jóvenes, por supuesto.",
-    "lines": [
-      "Estoy hablando de hombres con mentes jóvenes, por supuesto."
-    ],
-    "text": "Estoy hablando de hombres con mentes jóvenes, por supuesto.",
-    "startMs": 1002000,
-    "endMs": 1005000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -11627,6 +11716,130 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "643",
+    "rawText": "Quiero que la ayudes a escapar de ti.\n¿No quería?",
+    "lines": [
+      "Quiero que la ayudes a escapar de ti.",
+      "¿No quería?"
+    ],
+    "text": "Quiero que la ayudes a escapar de ti. ¿No quería?",
+    "startMs": 2884333,
+    "endMs": 2887333,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "644",
+    "rawText": "No, no, no.",
+    "lines": [
+      "No, no, no."
+    ],
+    "text": "No, no, no.",
+    "startMs": 2887416,
+    "endMs": 2888291,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "645",
+    "rawText": "¿Qué le decías?",
+    "lines": [
+      "¿Qué le decías?"
+    ],
+    "text": "¿Qué le decías?",
+    "startMs": 2891500,
+    "endMs": 2892625,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "646",
+    "rawText": "No he dicho nada.",
+    "lines": [
+      "No he dicho nada."
+    ],
+    "text": "No he dicho nada.",
+    "startMs": 2893541,
+    "endMs": 2894541,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "647",
+    "rawText": "¡Te he oído hablar!",
+    "lines": [
+      "¡Te he oído hablar!"
+    ],
+    "text": "¡Te he oído hablar!",
+    "startMs": 2895458,
+    "endMs": 2897041,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "648",
+    "rawText": "¿Qué estabas murmurando?",
+    "lines": [
+      "¿Qué estabas murmurando?"
+    ],
+    "text": "¿Qué estabas murmurando?",
+    "startMs": 2897458,
+    "endMs": 2899666,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "649",
+    "rawText": "No he dicho nada.",
+    "lines": [
+      "No he dicho nada."
+    ],
+    "text": "No he dicho nada.",
+    "startMs": 2900250,
+    "endMs": 2901416,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "650",
+    "rawText": "- ¿No me has oído?\n- ¿Por qué me pegas?",
+    "lines": [
+      "- ¿No me has oído?",
+      "- ¿Por qué me pegas?"
+    ],
+    "text": "- ¿No me has oído? - ¿Por qué me pegas?",
+    "startMs": 2902416,
+    "endMs": 2905291,
+    "speaker": null,
+    "speakerMarkers": [
+      "-"
+    ],
+    "containsMultipleSpeakers": true
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
     "cueId": "667",
     "rawText": "¡Cállate!",
     "lines": [
@@ -11999,14 +12212,15 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "705",
-    "rawText": "El deseo se desborda como el azul de una laguna",
+    "cueId": "722",
+    "rawText": "fluye hacia mí como una brisa fresca\nsuave y ligera",
     "lines": [
-      "El deseo se desborda como el azul de una laguna"
+      "fluye hacia mí como una brisa fresca",
+      "suave y ligera"
     ],
-    "text": "El deseo se desborda como el azul de una laguna",
-    "startMs": 3179041,
-    "endMs": 3182750,
+    "text": "fluye hacia mí como una brisa fresca suave y ligera",
+    "startMs": 3248625,
+    "endMs": 3251833,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12014,15 +12228,15 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "706",
-    "rawText": "Estamos sentados juntos, pero aún no quiero\nDeseo más",
+    "cueId": "723",
+    "rawText": "Tocar y envolver con tus alas\nmi tierno cuerpo, toma alas y vuela",
     "lines": [
-      "Estamos sentados juntos, pero aún no quiero",
-      "Deseo más"
+      "Tocar y envolver con tus alas",
+      "mi tierno cuerpo, toma alas y vuela"
     ],
-    "text": "Estamos sentados juntos, pero aún no quiero Deseo más",
-    "startMs": 3182833,
-    "endMs": 3186416,
+    "text": "Tocar y envolver con tus alas mi tierno cuerpo, toma alas y vuela",
+    "startMs": 3252291,
+    "endMs": 3259041,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12030,15 +12244,15 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "707",
-    "rawText": "Y nado en las profundidades\nAbrazando tu esencia",
+    "cueId": "724",
+    "rawText": "En la magia arremolinada del río\ndel oleaje?",
     "lines": [
-      "Y nado en las profundidades",
-      "Abrazando tu esencia"
+      "En la magia arremolinada del río",
+      "del oleaje?"
     ],
-    "text": "Y nado en las profundidades Abrazando tu esencia",
-    "startMs": 3186666,
-    "endMs": 3190333,
+    "text": "En la magia arremolinada del río del oleaje?",
+    "startMs": 3259916,
+    "endMs": 3265041,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12046,15 +12260,15 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "708",
-    "rawText": "Mi mente brilla como la arena blanca.\nHermoso",
+    "cueId": "725",
+    "rawText": "Dependes de mí, día y noche\nNo puedes irte, pase lo que pase",
     "lines": [
-      "Mi mente brilla como la arena blanca.",
-      "Hermoso"
+      "Dependes de mí, día y noche",
+      "No puedes irte, pase lo que pase"
     ],
-    "text": "Mi mente brilla como la arena blanca. Hermoso",
-    "startMs": 3190416,
-    "endMs": 3194125,
+    "text": "Dependes de mí, día y noche No puedes irte, pase lo que pase",
+    "startMs": 3265166,
+    "endMs": 3270750,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12062,14 +12276,15 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "709",
-    "rawText": "Iluminados por la luz divina de la sonrisa",
+    "cueId": "726",
+    "rawText": "En las hojas en flor\nEs mucho que ver h}><}><}>",
     "lines": [
-      "Iluminados por la luz divina de la sonrisa"
+      "En las hojas en flor",
+      "Es mucho que ver h}><}><}>"
     ],
-    "text": "Iluminados por la luz divina de la sonrisa",
-    "startMs": 3194333,
-    "endMs": 3199000,
+    "text": "En las hojas en flor Es mucho que ver h}><}><}>",
+    "startMs": 3271166,
+    "endMs": 3274916,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12077,15 +12292,14 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "710",
-    "rawText": "En un lecho iluminado por la luna\nMiles de flores han caído",
+    "cueId": "727",
+    "rawText": "Lo que no puedo ofrecerte se queda dentro de mí",
     "lines": [
-      "En un lecho iluminado por la luna",
-      "Miles de flores han caído"
+      "Lo que no puedo ofrecerte se queda dentro de mí"
     ],
-    "text": "En un lecho iluminado por la luna Miles de flores han caído",
-    "startMs": 3199166,
-    "endMs": 3202750,
+    "text": "Lo que no puedo ofrecerte se queda dentro de mí",
+    "startMs": 3275000,
+    "endMs": 3279166,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12093,14 +12307,14 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "711",
-    "rawText": "Un paisaje tan delicado",
+    "cueId": "728",
+    "rawText": "Oh sueños florecientes",
     "lines": [
-      "Un paisaje tan delicado"
+      "Oh sueños florecientes"
     ],
-    "text": "Un paisaje tan delicado",
-    "startMs": 3202833,
-    "endMs": 3205166,
+    "text": "Oh sueños florecientes",
+    "startMs": 3332416,
+    "endMs": 3336375,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12108,15 +12322,14 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "712",
-    "rawText": "Mis anillos se rompen en tu regazo,\nme rindo",
+    "cueId": "729",
+    "rawText": "En la cesta de jazmines del cielo",
     "lines": [
-      "Mis anillos se rompen en tu regazo,",
-      "me rindo"
+      "En la cesta de jazmines del cielo"
     ],
-    "text": "Mis anillos se rompen en tu regazo, me rindo",
-    "startMs": 3205250,
-    "endMs": 3210375,
+    "text": "En la cesta de jazmines del cielo",
+    "startMs": 3336708,
+    "endMs": 3340000,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12675,14 +12888,14 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "895",
-    "rawText": "¡Voy a morir, hermano!",
+    "cueId": "883",
+    "rawText": "¿Creíste que podrías escapar?",
     "lines": [
-      "¡Voy a morir, hermano!"
+      "¿Creíste que podrías escapar?"
     ],
-    "text": "¡Voy a morir, hermano!",
-    "startMs": 5225083,
-    "endMs": 5227041,
+    "text": "¿Creíste que podrías escapar?",
+    "startMs": 4651750,
+    "endMs": 4653250,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12690,14 +12903,14 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "896",
-    "rawText": "Voy... voy a... ¡Voy a morir aquí!",
+    "cueId": "884",
+    "rawText": "¿Quién es usted?",
     "lines": [
-      "Voy... voy a... ¡Voy a morir aquí!"
+      "¿Quién es usted?"
     ],
-    "text": "Voy... voy a... ¡Voy a morir aquí!",
-    "startMs": 5227125,
-    "endMs": 5231541,
+    "text": "¿Quién es usted?",
+    "startMs": 5164916,
+    "endMs": 5165791,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12705,14 +12918,14 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "897",
-    "rawText": "¿Cuánto tiempo ha pasado?",
+    "cueId": "885",
+    "rawText": "Soy yo.",
     "lines": [
-      "¿Cuánto tiempo ha pasado?"
+      "Soy yo."
     ],
-    "text": "¿Cuánto tiempo ha pasado?",
-    "startMs": 5232583,
-    "endMs": 5234333,
+    "text": "Soy yo.",
+    "startMs": 5167791,
+    "endMs": 5168750,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12720,14 +12933,14 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "898",
-    "rawText": "¿Cuántos años han pasado?",
+    "cueId": "886",
+    "rawText": "¡Soy yo!",
     "lines": [
-      "¿Cuántos años han pasado?"
+      "¡Soy yo!"
     ],
-    "text": "¿Cuántos años han pasado?",
-    "startMs": 5236208,
-    "endMs": 5240416,
+    "text": "¡Soy yo!",
+    "startMs": 5173083,
+    "endMs": 5174125,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -12735,59 +12948,14 @@
   {
     "sourceId": "the_goat_life_es",
     "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "899",
-    "rawText": "No sé nada.",
+    "cueId": "887",
+    "rawText": "Juez.",
     "lines": [
-      "No sé nada."
+      "Juez."
     ],
-    "text": "No sé nada.",
-    "startMs": 5241208,
-    "endMs": 5243875,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "900",
-    "rawText": "¡No sé nada!",
-    "lines": [
-      "¡No sé nada!"
-    ],
-    "text": "¡No sé nada!",
-    "startMs": 5245500,
-    "endMs": 5247416,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "901",
-    "rawText": "Vamos, hermano. Salgamos de aquí.",
-    "lines": [
-      "Vamos, hermano. Salgamos de aquí."
-    ],
-    "text": "Vamos, hermano. Salgamos de aquí.",
-    "startMs": 5248125,
-    "endMs": 5251458,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "902",
-    "rawText": "Larguémonos de aquí. ¡Vamos! ¡Vamos!",
-    "lines": [
-      "Larguémonos de aquí. ¡Vamos! ¡Vamos!"
-    ],
-    "text": "Larguémonos de aquí. ¡Vamos! ¡Vamos!",
-    "startMs": 5251541,
-    "endMs": 5253291,
+    "text": "Juez.",
+    "startMs": 5182791,
+    "endMs": 5184166,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -13069,127 +13237,6 @@
     "text": "¿Se encuentra bien?",
     "startMs": 5726708,
     "endMs": 5727791,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1020",
-    "rawText": "Ya viene, lo juro.",
-    "lines": [
-      "Ya viene, lo juro."
-    ],
-    "text": "Ya viene, lo juro.",
-    "startMs": 6272250,
-    "endMs": 6273208,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1021",
-    "rawText": "Come.",
-    "lines": [
-      "Come."
-    ],
-    "text": "Come.",
-    "startMs": 6286208,
-    "endMs": 6287250,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1022",
-    "rawText": "Come hasta reventar.",
-    "lines": [
-      "Come hasta reventar."
-    ],
-    "text": "Come hasta reventar.",
-    "startMs": 6288125,
-    "endMs": 6289750,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1023",
-    "rawText": "Me voy, queridos.",
-    "lines": [
-      "Me voy, queridos."
-    ],
-    "text": "Me voy, queridos.",
-    "startMs": 6293333,
-    "endMs": 6294458,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1024",
-    "rawText": "No voy a volver.",
-    "lines": [
-      "No voy a volver."
-    ],
-    "text": "No voy a volver.",
-    "startMs": 6297333,
-    "endMs": 6298500,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1025",
-    "rawText": "Me voy.",
-    "lines": [
-      "Me voy."
-    ],
-    "text": "Me voy.",
-    "startMs": 6332541,
-    "endMs": 6333541,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1026",
-    "rawText": "Me voy.",
-    "lines": [
-      "Me voy."
-    ],
-    "text": "Me voy.",
-    "startMs": 6336000,
-    "endMs": 6337125,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1027",
-    "rawText": "Aunque signifique la muerte,\nvoy a salir de aquí.",
-    "lines": [
-      "Aunque signifique la muerte,",
-      "voy a salir de aquí."
-    ],
-    "text": "Aunque signifique la muerte, voy a salir de aquí.",
-    "startMs": 6342416,
-    "endMs": 6343791,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -13799,97 +13846,6 @@
     "text": "¡Juez! ¡Hijo!",
     "startMs": 7176916,
     "endMs": 7179000,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1158",
-    "rawText": "¡Despierta!",
-    "lines": [
-      "¡Despierta!"
-    ],
-    "text": "¡Despierta!",
-    "startMs": 7179708,
-    "endMs": 7180916,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1159",
-    "rawText": "¡Amigo, no puedes dejarte llevar!",
-    "lines": [
-      "¡Amigo, no puedes dejarte llevar!"
-    ],
-    "text": "¡Amigo, no puedes dejarte llevar!",
-    "startMs": 7183791,
-    "endMs": 7185208,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1160",
-    "rawText": "¡Levántate!",
-    "lines": [
-      "¡Levántate!"
-    ],
-    "text": "¡Levántate!",
-    "startMs": 7186583,
-    "endMs": 7187708,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1161",
-    "rawText": "¡Contrólate!\n¡Levántate!",
-    "lines": [
-      "¡Contrólate!",
-      "¡Levántate!"
-    ],
-    "text": "¡Contrólate! ¡Levántate!",
-    "startMs": 7188000,
-    "endMs": 7189833,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1162",
-    "rawText": "¡Cállate, maldito perro!",
-    "lines": [
-      "¡Cállate, maldito perro!"
-    ],
-    "text": "¡Cállate, maldito perro!",
-    "startMs": 7191291,
-    "endMs": 7192916,
-    "speaker": null,
-    "speakerMarkers": [],
-    "containsMultipleSpeakers": false
-  },
-  {
-    "sourceId": "the_goat_life_es",
-    "sourceChecksum": "7733d011422ce1ed",
-    "cueId": "1163",
-    "rawText": "¡Ni una palabra más!",
-    "lines": [
-      "¡Ni una palabra más!"
-    ],
-    "text": "¡Ni una palabra más!",
-    "startMs": 7193916,
-    "endMs": 7195791,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false
@@ -15059,6 +15015,101 @@
     "text": "¡Te daré una lección!",
     "startMs": 9757916,
     "endMs": 9759875,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "1489",
+    "rawText": "...e inmigrantes llenos de televisores\nentre la multitud que espera.",
+    "lines": [
+      "...e inmigrantes llenos de televisores",
+      "entre la multitud que espera."
+    ],
+    "text": "...e inmigrantes llenos de televisores entre la multitud que espera.",
+    "startMs": 9913083,
+    "endMs": 9917333,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "1490",
+    "rawText": "...mi hijo y mi esposa Sainu\nesperándome.",
+    "lines": [
+      "...mi hijo y mi esposa Sainu",
+      "esperándome."
+    ],
+    "text": "...mi hijo y mi esposa Sainu esperándome.",
+    "startMs": 9917375,
+    "endMs": 9920750,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "1491",
+    "rawText": "Lo único que me queda\ndedicarles mi vida.",
+    "lines": [
+      "Lo único que me queda",
+      "dedicarles mi vida."
+    ],
+    "text": "Lo único que me queda dedicarles mi vida.",
+    "startMs": 9921708,
+    "endMs": 9924125,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "1492",
+    "rawText": "NO ES SOLO LA HISTORIA DE NAJEEB.",
+    "lines": [
+      "NO ES SOLO LA HISTORIA DE NAJEEB."
+    ],
+    "text": "NO ES SOLO LA HISTORIA DE NAJEEB.",
+    "startMs": 9926291,
+    "endMs": 9927583,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "1493",
+    "rawText": "PARA SOBREVIVIR, DEBEN DEFENDER SU PAÍS\nABANDONANDO SUS HOGARES",
+    "lines": [
+      "PARA SOBREVIVIR, DEBEN DEFENDER SU PAÍS",
+      "ABANDONANDO SUS HOGARES"
+    ],
+    "text": "PARA SOBREVIVIR, DEBEN DEFENDER SU PAÍS ABANDONANDO SUS HOGARES",
+    "startMs": 9927708,
+    "endMs": 9930042,
+    "speaker": null,
+    "speakerMarkers": [],
+    "containsMultipleSpeakers": false
+  },
+  {
+    "sourceId": "the_goat_life_es",
+    "sourceChecksum": "7733d011422ce1ed",
+    "cueId": "1494",
+    "rawText": "QUE PERDIÓ LA VIDA EN EL DESIERTO\nEL DESTINO COMÚN DE MILES DE PERSONAS",
+    "lines": [
+      "QUE PERDIÓ LA VIDA EN EL DESIERTO",
+      "EL DESTINO COMÚN DE MILES DE PERSONAS"
+    ],
+    "text": "QUE PERDIÓ LA VIDA EN EL DESIERTO EL DESTINO COMÚN DE MILES DE PERSONAS",
+    "startMs": 9930043,
+    "endMs": 9932315,
     "speaker": null,
     "speakerMarkers": [],
     "containsMultipleSpeakers": false

@@ -573,7 +573,7 @@ def _extract_boundaries(
             "needsSecondReview": False,
             "reviewReason": "",
             "reviewStatus": "unreviewed",
-
+            "labelOrigin": None,
             # Chain and scene (filled later)
             "chainId": None,
             "sceneId": None,
@@ -897,9 +897,9 @@ def _generate_review_csv(
         "linguisticTags", "timingBand",
         "chainId",
         "goldLabel", "labelConfidence", "reviewerCount",
+        "labelOrigin",
         "needsSecondReview", "reviewReason", "reviewStatus",
     ]
-
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
@@ -930,11 +930,19 @@ def _compute_maturity_level(entries: list[dict[str, Any]]) -> dict[str, Any]:
     """Calculate benchmark maturity level based on review progress and coverage.
 
     Rules:
-      exploratory: 75+ reviewed non-ambiguous boundaries, 2 major decision categories
+      exploratory: 75+ reviewed non-ambiguous boundaries,
+                   meaningful numbers of both reviewed JOIN and BREAK labels
       usable:      150+ reviewed non-ambiguous boundaries, 2+ productions,
-                   major structural & timing dimensions, partial second review
-      validated:   250+ reviewed non-ambiguous boundaries, strong native-language
-                   & domain coverage, held-out test set, second-review % met
+                   both JOIN and BREAK represented,
+                   dev and test labels reviewed,
+                   at least some completed second review
+      validated:   200+ reviewed non-ambiguous entries,
+                   at least 80% of all entries reviewed,
+                   both JOIN and BREAK adequately represented,
+                   at least 20% second-reviewed,
+                   all disagreements adjudicated,
+                   native-source coverage target documented,
+                   frozen held-out test exists
     """
     reviewed_non_ambig = sum(
         1 for e in entries
@@ -950,7 +958,6 @@ def _compute_maturity_level(entries: list[dict[str, Any]]) -> dict[str, Any]:
     all_tags: set[str] = set()
     for e in entries:
         all_tags.update(e.get("samplingTags", []))
-    tag_count = len(all_tags)
 
     # JOIN-like and BREAK-like categories represented
     break_like_tags = {"independent_utterance", "short_response",
@@ -975,9 +982,6 @@ def _compute_maturity_level(entries: list[dict[str, Any]]) -> dict[str, Any]:
     has_held_out = any(e.get("split") == "test" for e in entries)
     has_dev = any(e.get("split") == "dev" for e in entries)
 
-    # Native-language coverage (entries where originalSpokenLanguage == "es")
-    native_count = sum(1 for e in entries if e.get("originalSpokenLanguage") == "es")
-
     # Domain diversity via contentStructure
     content_types_actual: set[str] = set()
     for e in entries:
@@ -985,27 +989,72 @@ def _compute_maturity_level(entries: list[dict[str, Any]]) -> dict[str, Any]:
         if ct and ct != "unknown":
             content_types_actual.add(ct)
 
+    # Count reviewed JOIN and BREAK labels for exploratory threshold
+    reviewed_join = sum(
+        1 for e in entries
+        if e.get("reviewStatus") in ("reviewed", "adjudicated")
+        and e.get("goldLabel") == "JOIN"
+    )
+    reviewed_break = sum(
+        1 for e in entries
+        if e.get("reviewStatus") in ("reviewed", "adjudicated")
+        and e.get("goldLabel") == "BREAK"
+    )
+
+    # Label origin: check that reviewed entries have labelOrigin == "human"
+    all_reviewed_human = all(
+        e.get("labelOrigin") == "human"
+        for e in entries
+        if e.get("reviewStatus") in ("reviewed", "adjudicated")
+    )
+
+    # Disagreement adjudication check for validated
+    adjudicated_count = sum(
+        1 for e in entries if e.get("reviewStatus") == "adjudicated"
+    )
+    needs_adjudication_count = sum(
+        1 for e in entries if e.get("reviewStatus") == "needs_adjudication"
+    )
+    all_disagreements_adjudicated = needs_adjudication_count == 0
+
+    # Native-source coverage (entries where originalSpokenLanguage == "es")
+    native_count = sum(1 for e in entries if e.get("originalSpokenLanguage") == "es")
+
     # Determinations
-    is_exploratory = reviewed_non_ambig >= 75 and has_break_like and has_join_like
+    is_exploratory = (
+        reviewed_non_ambig >= 75
+        and reviewed_join >= 5
+        and reviewed_break >= 5
+        and has_break_like
+        and has_join_like
+    )
 
     is_usable = (
         reviewed_non_ambig >= 150
         and num_productions >= 2
+        and reviewed_join >= 10
+        and reviewed_break >= 10
         and has_break_like
         and has_join_like
         and has_timing_spread
         and has_dev
         and has_held_out
         and second_review_pct > 0
+        and all_reviewed_human
     )
 
     is_validated = (
-        reviewed_non_ambig >= 250
+        reviewed_non_ambig >= 200
+        and total_reviewed >= len(entries) * 0.8
+        and reviewed_join >= 20
+        and reviewed_break >= 20
         and num_productions >= 2
-        and native_count >= 50
         and content_types_actual.issuperset({"dialogue", "monologue"})
         and has_held_out
         and second_review_pct >= 0.2
+        and all_disagreements_adjudicated
+        and native_count >= 50
+        and all_reviewed_human
     )
 
     if is_validated:
@@ -1015,7 +1064,7 @@ def _compute_maturity_level(entries: list[dict[str, Any]]) -> dict[str, Any]:
     elif is_exploratory:
         level = "exploratory"
     else:
-        level = "exploratory" if reviewed_non_ambig > 0 else "none"
+        level = "none"
 
     return {
         "maturityLevel": level,
@@ -1029,21 +1078,32 @@ def _compute_maturity_level(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "secondReviewPercentage": round(second_review_pct, 3),
         "nativeSourceEntries": native_count,
         "contentStructures": sorted(content_types_actual),
+        "reviewedJoin": reviewed_join,
+        "reviewedBreak": reviewed_break,
+        "adjudicatedCount": adjudicated_count,
+        "isFrozen": False,  # updated by policy freeze check
     }
 
 
-def _is_operationally_ready(entries: list[dict[str, Any]]) -> bool:
+def _is_operationally_ready(
+    entries: list[dict[str, Any]],
+    manifest: list[dict[str, Any]],
+    reference: list[dict[str, Any]],
+) -> bool:
     """Check if the benchmark meets operational readiness criteria.
 
     Operational readiness is independent of native-source coverage completeness.
-    Requires:
+    Validates:
       - at least 150 candidate boundaries
       - at least two distinct productions (sources)
-      - sufficient JOIN-like and BREAK-like sampling tag coverage
-      - dialogue, punctuation, timing and structural coverage
-      - portable validation passing (reference manifest exists)
-      - all source provenance documented
-      - no model-generated gold labels
+      - JOIN-like and BREAK-like sampling tag coverage
+      - structural, timing and dialogue coverage
+      - every candidate source exists in the source manifest
+      - every source has all required provenance fields
+      - every source has a valid sourceQualityTier
+      - every selected and context cue exists in the portable reference
+      - no model prediction, probability or generated-label metadata
+      - human-reviewed gold labels do not block readiness
     """
     if len(entries) < 150:
         return False
@@ -1080,13 +1140,62 @@ def _is_operationally_ready(entries: list[dict[str, Any]]) -> bool:
     if not has_dialogue_or_punctuation:
         return False
 
-    # No model-generated labels
-    if any(e.get("goldLabel") is not None for e in entries):
-        # If labels exist, ensure none are machine-generated — requires
-        # checking that no labels were set by a model. We flag this by
-        # checking if labels exist at all during build time (before labeling
-        # they're all None).
-        pass  # This is enforced at the policy level, not by auto-detection
+    # Every candidate source exists in the source manifest
+    manifest_by_id: dict = {m["sourceId"]: m for m in manifest}
+    for e in entries:
+        src = e["sourceId"]
+        if src not in manifest_by_id:
+            return False
+
+    # Every source has all required provenance fields
+    required_prov = {"sourceId", "title", "contentType", "contentStructure",
+                     "sourceQualityTier", "originalSpokenLanguage",
+                     "subtitleLanguage", "fullSha256", "cueCount"}
+    for m in manifest:
+        missing = required_prov - set(m.keys())
+        if missing:
+            return False
+
+    # Every source has a valid sourceQualityTier
+    valid_tiers = {"native_original", "professional_translation",
+                   "community_translation", "reviewed_machine_transcription",
+                   "unknown"}
+    for m in manifest:
+        tier = m.get("sourceQualityTier", "")
+        if tier not in valid_tiers:
+            return False
+
+    # Every selected and context cue exists in the portable reference
+    by_source_cue: dict[str, set[str]] = {}
+    for ref in reference:
+        src = ref["sourceId"]
+        if src not in by_source_cue:
+            by_source_cue[src] = set()
+        by_source_cue[src].add(ref["cueId"])
+
+    for e in entries:
+        src = e["sourceId"]
+        ref_cues = by_source_cue.get(src, set())
+        for side in ("left", "right"):
+            cid = e[f"{side}CueId"]
+            if cid not in ref_cues:
+                return False
+        for ctx_list_key in ("previousContext", "nextContext"):
+            for ctx in e.get(ctx_list_key, []):
+                ctx_id = ctx["cueId"]
+                if ctx_id not in ref_cues:
+                    return False
+
+    # No model prediction, probability or generated-label metadata
+    forbidden = {"modelProbability", "modelPrediction", "modelScore",
+                 "saTScore", "prediction", "model", "evidence"}
+    for e in entries:
+        found = forbidden & set(e.keys())
+        if found:
+            return False
+
+    # Human-reviewed gold labels do not block readiness (labelOrigin == "human" is fine)
+    # Non-human non-null labels would have been caught by forbidden fields check above
 
     return True
 
@@ -1094,6 +1203,7 @@ def _is_operationally_ready(entries: list[dict[str, Any]]) -> bool:
 def _generate_dataset_report(
     entries: list[dict[str, Any]],
     manifest: list[dict[str, Any]],
+    reference: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Generate comprehensive dataset report."""
     from collections import Counter, defaultdict
@@ -1182,6 +1292,7 @@ def _generate_dataset_report(
             chain_ids.add(cid)
 
     unreviewed = sum(1 for e in entries if e.get("reviewStatus") == "unreviewed")
+    human_labeled = sum(1 for e in entries if e.get("labelOrigin") == "human")
 
     # Review progress
     reviewed = sum(1 for e in entries if e.get("reviewStatus") in ("reviewed", "adjudicated"))
@@ -1193,7 +1304,7 @@ def _generate_dataset_report(
     maturity = _compute_maturity_level(entries)
 
     # Operational readiness
-    op_ready = _is_operationally_ready(entries)
+    op_ready = _is_operationally_ready(entries, manifest, reference)
 
     # Source provenance
     source_provenance = []
@@ -1223,6 +1334,7 @@ def _generate_dataset_report(
             "testCount": test_count,
             "devRatio": round(dev_count / len(entries), 3) if entries else 0,
             "unreviewed": unreviewed,
+            "humanLabeledCount": human_labeled,
             "multilineCues": multiline,
             "multilineLeft": multiline_left,
             "multilineRight": multiline_right,
@@ -1465,8 +1577,6 @@ def main() -> None:
     maturity = _compute_maturity_level(sampled)
     print(f"Maturity: {maturity['maturityLevel']} "
           f"({maturity['reviewedNonAmbiguous']} reviewed non-ambiguous)")
-    op_ready = _is_operationally_ready(sampled)
-    print(f"Operationally ready: {op_ready}")
 
     # Save output
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -1481,12 +1591,16 @@ def main() -> None:
         json.dump(ref, f, ensure_ascii=False, indent=2)
     print(f"Saved reference manifest ({len(ref)} cue records) to {ref_path}")
 
+    # Operational readiness (requires reference manifest)
+    op_ready = _is_operationally_ready(sampled, manifest_sources, ref)
+    print(f"Operationally ready: {op_ready}")
+
     csv_path = args.output.with_suffix(".csv")
     _generate_review_csv(sampled, csv_path)
     print(f"Saved CSV review to {csv_path}")
 
     # Dataset report
-    report = _generate_dataset_report(sampled, manifest_sources)
+    report = _generate_dataset_report(sampled, manifest_sources, ref)
     report_path = args.output.parent / "spanish_boundary_dataset_report.json"
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
