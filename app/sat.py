@@ -363,18 +363,21 @@ class SaTSentenceReconstructor:
         self,
         model: SaTModel | SaTProbabilityModel | None = None,
         model_name: str = SAT_MODEL_NAME,
-        profile: BoundaryLanguageProfile | None = None,
     ) -> None:
         self.model_name = model_name
         self._model = model
         self._load_lock = threading.Lock()
-        self.profile = profile
 
     @property
     def is_loaded(self) -> bool:
         return self._model is not None
 
-    def score_boundaries(self, segments: Sequence[str]) -> list[BoundaryEvidence]:
+    def score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        profile: BoundaryLanguageProfile | None = None,
+    ) -> list[BoundaryEvidence]:
         """Return SaT's raw probability for every original cue boundary.
 
         ``characterOffset`` is the zero-based index consumed by wtpsplit's
@@ -385,7 +388,7 @@ class SaTSentenceReconstructor:
         if len(segments) < 2:
             return []
 
-        joined_text, boundary_offsets = _join_segments_with_boundary_offsets(segments, profile=self.profile)
+        joined_text, boundary_offsets = _join_segments_with_boundary_offsets(segments, profile=profile)
         _validate_boundary_offsets(
             boundary_offsets,
             segment_count=len(segments),
@@ -432,6 +435,7 @@ class SaTSentenceReconstructor:
         self,
         segments: Sequence[str],
         *,
+        profile: BoundaryLanguageProfile | None = None,
         config: WindowedScoringConfig | None = None,
     ) -> list[BoundaryEvidence]:
         """Score boundaries using overlapping contextual windows.
@@ -456,7 +460,7 @@ class SaTSentenceReconstructor:
         if n <= cfg.window_size:
             # Single window covering all segments
             try:
-                return self.score_boundaries(segments)
+                return self.score_boundaries(segments, profile=profile)
             except Exception:
                 return [
                     {
@@ -477,7 +481,7 @@ class SaTSentenceReconstructor:
         for wp in plan:
             window_segments = segments[wp["windowStart"] : wp["windowEnd"]]
             try:
-                window_evidence = self.score_boundaries(window_segments)
+                window_evidence = self.score_boundaries(window_segments, profile=profile)
             except Exception:
                 # Mark only this window's owned boundaries as unavailable.
                 for b in range(wp["ownedStart"], wp["ownedEnd"] + 1):

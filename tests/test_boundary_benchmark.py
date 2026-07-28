@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 from app.subtitles import SubtitleSentenceReconstructor
 from scripts.evaluate_subtitle_boundaries import evaluate_fixture, load_fixture
@@ -10,7 +10,12 @@ class ConstantBoundaryApi:
     def __init__(self, probability: float) -> None:
         self.probability = probability
 
-    def score_boundaries(self, segments: Sequence[str]) -> list[dict[str, float]]:
+    def score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        profile: Any = None,
+    ) -> list[dict[str, float]]:
         return [
             {"boundaryProbability": self.probability}
             for _ in range(max(0, len(segments) - 1))

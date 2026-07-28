@@ -747,9 +747,20 @@ class BoundaryScoringApi(Protocol):
     Either ``score_boundaries`` or ``windowed_score_boundaries`` must be callable.
     """
 
-    def score_boundaries(self, texts: Sequence[str]) -> Any: ...
+    def score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        profile: BoundaryLanguageProfile | None = None,
+    ) -> Any: ...
 
-    def windowed_score_boundaries(self, texts: Sequence[str]) -> Any: ...
+    def windowed_score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        profile: BoundaryLanguageProfile | None = None,
+        config: Any = None,
+    ) -> Any: ...
 
 
 class SubtitleSentenceReconstructor:
@@ -812,7 +823,7 @@ class SubtitleSentenceReconstructor:
         texts = [segment.text for segment in segments]
         windowed = getattr(self.boundary_api, "windowed_score_boundaries", None)
         if callable(windowed):
-            response = windowed(texts)
+            response = windowed(texts, profile=self.language_profile)
         else:
             score_boundaries = getattr(self.boundary_api, "score_boundaries", None)
             if not callable(score_boundaries):
@@ -820,7 +831,7 @@ class SubtitleSentenceReconstructor:
                     [None] * boundary_count,
                     "boundary scoring is unavailable",
                 )
-            response = score_boundaries(texts)
+            response = score_boundaries(texts, profile=self.language_profile)
 
         try:
             evidence = _normalise_boundary_evidence(response, segments)

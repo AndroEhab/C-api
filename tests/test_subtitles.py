@@ -21,11 +21,14 @@ from app.subtitles import (
 class FakeBoundaryApi:
     probabilities: Any
     calls: list[list[str]]
-
-    def score_boundaries(self, segments: Sequence[str]) -> Any:
+    def score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        profile: Any = None,
+    ) -> Any:
         self.calls.append(list(segments))
         return self.probabilities
-
 
 @dataclass
 class FakeGroupingApi:
@@ -37,7 +40,12 @@ class FakeGroupingApi:
         if self.score_calls is None:
             self.score_calls = []
 
-    def score_boundaries(self, segments: Sequence[str]) -> Any:
+    def score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        profile: Any = None,
+    ) -> Any:
         assert self.score_calls is not None
         self.score_calls.append(list(segments))
         response = self.groups.get("groups") if isinstance(self.groups, Mapping) else self.groups
@@ -72,14 +80,24 @@ class ConstantProbabilityApi:
     """Returns the same probability for every boundary."""
     probability: float
 
-    def windowed_score_boundaries(self, segments: Sequence[str]) -> list[dict[str, float]]:
+    def windowed_score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        profile: Any = None,
+    ) -> list[dict[str, float]]:
         return [
             {"boundaryProbability": self.probability}
             for _ in range(max(0, len(segments) - 1))
         ]
 
-    def score_boundaries(self, segments: Sequence[str]) -> list[dict[str, float]]:
-        return self.windowed_score_boundaries(segments)
+    def score_boundaries(
+        self,
+        segments: Sequence[str],
+        *,
+        profile: Any = None,
+    ) -> list[dict[str, float]]:
+        return self.windowed_score_boundaries(segments, profile=profile)
 
 
 
@@ -1166,7 +1184,7 @@ def test_unavailable_evidence_remains_uncertain_for_all_profiles() -> None:
     from app.language_profile import NeutralBoundaryProfile
 
     class FailingApi:
-        def score_boundaries(self, texts):
+        def score_boundaries(self, texts, *, profile=None):
             return None
 
     cues = [
@@ -1305,25 +1323,67 @@ def test_canonical_reconstructed_text_uses_selected_profile() -> None:
     class _FakeBoundaryApi:
         probability: float
 
-        def windowed_score_boundaries(self, segments: Sequence[str]) -> list[dict[str, float]]:
+        def windowed_score_boundaries(
+            self,
+            segments: Sequence[str],
+            *,
+            profile: Any = None,
+        ) -> list[dict[str, float]]:
             return [
                 {"boundaryProbability": self.probability}
                 for _ in range(max(0, len(segments) - 1))
             ]
 
-    profile = NeutralBoundaryProfile()
-    reconstructor = SubtitleSentenceReconstructor(
-        _FakeBoundaryApi(0.4),
-        language_profile=profile,
+    from app.language_profile import EnglishBoundaryProfile
+
+    # Force a JOIN boundary: 0.1 probability is well below the join threshold.
+    api = _FakeBoundaryApi(0.1)
+
+    # ENGLISH profile: 'm attaches to 'I' → "I'm ready."
+    eng = SubtitleSentenceReconstructor(
+        _FakeBoundaryApi(0.1),
+        language_profile=EnglishBoundaryProfile(),
+    )
+    eng_sentences = eng.reconstruct([
+        SubtitleSegment("a", "I", 0, 100),
+        SubtitleSegment("b", "'m ready.", 150, 300),
+    ])
+    assert len(eng_sentences) == 1
+    eng_text = eng_sentences[0].text
+    assert eng_text == "I'm ready.", (
+        f"English profile should join contraction, got {eng_text!r}"
+    )
+
+    # NEUTRAL profile: 'm stays separate → "I 'm ready."
+    neutral = SubtitleSentenceReconstructor(
+        _FakeBoundaryApi(0.1),
+        language_profile=NeutralBoundaryProfile(),
+    )
+    neutral_sentences = neutral.reconstruct([
+        SubtitleSegment("a", "I", 0, 100),
+        SubtitleSegment("b", "'m ready.", 150, 300),
+    ])
+    assert len(neutral_sentences) == 1
+    neutral_text = neutral_sentences[0].text
+    assert neutral_text == "I 'm ready.", (
+        f"Neutral profile should keep space, got {neutral_text!r}"
+    )
+
+    # All non-whitespace source characters must be present and ordered.
+    source_chars = "I'mready."
+    eng_stripped = "".join(eng_text.split())
+    neutral_stripped = "".join(neutral_text.split())
+    assert eng_stripped == source_chars, (
+        f"English output lost or reordered chars: {eng_stripped!r} != {source_chars!r}"
+    )
+    assert neutral_stripped == source_chars, (
+        f"Neutral output lost or reordered chars: {neutral_stripped!r} != {source_chars!r}"
     )
 def test_borderline_probability_uncertain_under_neutral_profile() -> None:
     """A borderline probability (0.45) becomes UNCERTAIN under neutral profile
     but would JOIN under English profile's lower threshold."""
     from app.language_profile import NeutralBoundaryProfile, EnglishBoundaryProfile
-    from app.subtitles import (
-        SubtitleSentenceReconstructor, SubtitleSegment,
-        BoundaryPolicyConfig, DEFAULT_BOUNDARY_POLICY_CONFIG,
-    )
+    from app.subtitles import SubtitleSentenceReconstructor, SubtitleSegment
 
     # Use text fragments that don't trigger independent-statement detection:
     # no terminal punctuation, no capitalisation-based independence.
@@ -1603,3 +1663,37 @@ def test_arabic_diagnostics_report_neutral_profile() -> None:
     assert body["diagnostics"]["resolvedLanguage"] == "ar"
     assert body["diagnostics"]["profile"] == "NeutralBoundaryProfile"
     assert body["diagnostics"]["profileCode"] == "und"
+
+
+def test_no_mutable_profile_assignment_in_endpoint() -> None:
+    """The production /reconstruct-subtitles endpoint never mutates service.profile.
+
+    This test reads the endpoint source and verifies no assignment like
+    ``service.profile = ...`` exists.  The profile must be carried by the
+    ``SubtitleSentenceReconstructor``, not by the shared SaT service.
+    """
+    import ast
+    import inspect
+    from app.main import reconstruct_subtitles
+
+    source = inspect.getsource(reconstruct_subtitles)
+    tree = ast.parse(source)
+
+    class ProfileAssignmentFinder(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.found: list[tuple[int, str]] = []
+
+        def visit_Assign(self, node: ast.Assign) -> None:
+            for target in node.targets:
+                if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
+                    if target.value.id == "service" and target.attr == "profile":
+                        self.found.append((node.lineno, source.splitlines()[node.lineno - 1].strip()))
+            self.generic_visit(node)
+
+    finder = ProfileAssignmentFinder()
+    finder.visit(tree)
+
+    assert not finder.found, (
+        f"Endpoint must not assign to service.profile. Found {len(finder.found)} assignment(s): "
+        + "; ".join(f"line {l}: {s}" for l, s in finder.found)
+    )

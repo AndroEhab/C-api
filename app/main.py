@@ -398,8 +398,7 @@ def reconstruct_subtitles(
     profile, requested_language, resolved_language, profile_code = resolve_profile_with_metadata(
         request.language
     )
-    # Pass the profile to the SaT service so score_boundaries uses profile‑aware joining.
-    service.profile = profile
+    # The profile is carried by the SubtitleSentenceReconstructor, not the SaT service.
     reconstructor = SSR(service, language_profile=profile)
     segments = [segment.to_domain() for segment in request.segments]
     sentences = reconstructor.reconstruct(segments)

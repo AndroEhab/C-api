@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.language_profile import EnglishBoundaryProfile, NeutralBoundaryProfile
 from app.main import app, get_sat_service
 from app.sat import SAT_MODEL_NAME, SaTUnavailableError, SaTSentenceReconstructor, WindowedScoringConfig
 
@@ -440,7 +441,12 @@ class TestWindowedScoreBoundaries:
 
         class WindowWithFailures:
             """A boundary API that returns unavailable evidence for all boundaries."""
-            def windowed_score_boundaries(self, segments: list[str]) -> list[dict]:
+            def windowed_score_boundaries(
+                self,
+                segments: list[str],
+                *,
+                profile: Any = None,
+            ) -> list[dict]:
                 n = len(segments)
                 return [
                     {
@@ -524,3 +530,232 @@ class TestWindowedScoreBoundaries:
         assert len(evidence) == 199
         # All boundaries have valid probabilities (non-zero)
         assert all(e["boundaryProbability"] is not None and e["boundaryProbability"] > 0.0 for e in evidence)
+
+
+# ──── Task 7: Profile propagation through SaT ─────────────────────────────────
+
+
+class RecordingProbabilityModel:
+    """A fake SaT probability model that records every predict_proba() input.
+
+    Supports optional synchronisation via a ``barrier`` so two requests can
+    overlap during scoring for concurrency tests.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.barrier: threading.Barrier | None = None
+
+    def predict_proba(self, text: str) -> list[list[float]]:
+        self.calls.append(text)
+        if self.barrier is not None:
+            self.barrier.wait()
+        return [[min(0.01 * (i + 1), 0.99)] for i in range(len(text))]
+
+    def split(self, text: str) -> Sequence[str]:
+        return [text]
+
+
+def test_score_boundaries_model_input_uses_profile() -> None:
+    """score_boundaries feeds profile-joined text into predict_proba."""
+
+    # ENGLISH: contraction attached -> "I'm ready."
+    eng_model = RecordingProbabilityModel()
+    eng_svc = SaTSentenceReconstructor(model=eng_model)
+    eng_evidence = eng_svc.score_boundaries(
+        ["I", "'m ready."],
+        profile=EnglishBoundaryProfile(),
+    )
+    assert len(eng_model.calls) == 1
+    assert eng_model.calls[0] == "I'm ready.", (
+        f"English model input should be joined, got {eng_model.calls[0]!r}"
+    )
+    # Character offset = index of last char of left segment in joined text.
+    # English joined="I'm ready.", last char of "I" is at index 0.
+    assert eng_evidence[0]["characterOffset"] == 0, (
+        f"English offset {eng_evidence[0]['characterOffset']} != 0"
+    )
+
+    # NEUTRAL: space kept -> "I 'm ready."
+    neutral_model = RecordingProbabilityModel()
+    neutral_svc = SaTSentenceReconstructor(model=neutral_model)
+    neutral_evidence = neutral_svc.score_boundaries(
+        ["I", "'m ready."],
+        profile=NeutralBoundaryProfile(),
+    )
+    assert len(neutral_model.calls) == 1
+    assert neutral_model.calls[0] == "I 'm ready.", (
+        f"Neutral model input should keep space, got {neutral_model.calls[0]!r}"
+    )
+    # Neutral joined="I 'm ready.", last char of "I" is at index 0.
+    assert neutral_evidence[0]["characterOffset"] == 0, (
+        f"Neutral offset {neutral_evidence[0]['characterOffset']} != 0"
+    )
+
+
+def test_concurrent_english_and_spanish_are_isolated() -> None:
+    """Simultaneous English and Spanish requests receive correct profile-joined model input."""
+    import threading
+
+    barrier = threading.Barrier(2)  # both threads meet at predict_proba
+    eng_model = RecordingProbabilityModel()
+    eng_model.barrier = barrier
+    spa_model = RecordingProbabilityModel()
+    spa_model.barrier = barrier
+
+    results: dict[str, Any] = {}
+    errors: list[str] = []
+
+    def english_request() -> None:
+        try:
+            svc = SaTSentenceReconstructor(model=eng_model)
+            evidence = svc.score_boundaries(
+                ["I", "'m ready."],
+                profile=EnglishBoundaryProfile(),
+            )
+            results["eng_input"] = list(eng_model.calls)
+            results["eng_evidence"] = evidence
+        except Exception as exc:
+            errors.append(f"English: {exc!r}")
+
+    def spanish_request() -> None:
+        try:
+            svc = SaTSentenceReconstructor(model=spa_model)
+            evidence = svc.score_boundaries(
+                ["I", "'m ready."],
+                profile=NeutralBoundaryProfile(),
+            )
+            results["spa_input"] = list(spa_model.calls)
+            results["spa_evidence"] = evidence
+        except Exception as exc:
+            errors.append(f"Spanish: {exc!r}")
+
+    t1 = threading.Thread(target=english_request)
+    t2 = threading.Thread(target=spanish_request)
+
+    t1.start()
+    t2.start()
+
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert "eng_input" in results, f"English didn't complete. results keys: {list(results)}"
+    assert "spa_input" in results, f"Spanish didn't complete. results keys: {list(results)}"
+
+    # English always receives English-joined model input
+    assert results["eng_input"] == ["I'm ready."], (
+        f"English model input wrong: {results['eng_input']}"
+    )
+    # Spanish always receives neutral-joined model input
+    assert results["spa_input"] == ["I 'm ready."], (
+        f"Spanish model input wrong: {results['spa_input']}"
+    )
+    # Character offsets — both joined strings start with "I" at index 0
+    eng_offset = results["eng_evidence"][0]["characterOffset"]
+    assert eng_offset == 0, f"English offset {eng_offset}"
+    spa_offset = results["spa_evidence"][0]["characterOffset"]
+    assert spa_offset == 0, f"Spanish offset {spa_offset}"
+
+
+def test_concurrent_isolation_reversed_order() -> None:
+    """Reversed start order — Spanish then English — produces the same isolation."""
+    import threading
+
+    barrier = threading.Barrier(2)  # both threads meet at predict_proba
+    eng_model = RecordingProbabilityModel()
+    eng_model.barrier = barrier
+    spa_model = RecordingProbabilityModel()
+    spa_model.barrier = barrier
+
+    results: dict[str, Any] = {}
+    errors: list[str] = []
+
+    def english_request() -> None:
+        try:
+            svc = SaTSentenceReconstructor(model=eng_model)
+            evidence = svc.score_boundaries(
+                ["I", "'m ready."],
+                profile=EnglishBoundaryProfile(),
+            )
+            results["eng_input"] = list(eng_model.calls)
+            results["eng_evidence"] = evidence
+        except Exception as exc:
+            errors.append(f"English: {exc!r}")
+
+    def spanish_request() -> None:
+        try:
+            svc = SaTSentenceReconstructor(model=spa_model)
+            evidence = svc.score_boundaries(
+                ["I", "'m ready."],
+                profile=NeutralBoundaryProfile(),
+            )
+            results["spa_input"] = list(spa_model.calls)
+            results["spa_evidence"] = evidence
+        except Exception as exc:
+            errors.append(f"Spanish: {exc!r}")
+
+    # Spanish starts first, then English
+    t2 = threading.Thread(target=spanish_request)
+    t1 = threading.Thread(target=english_request)
+
+    t2.start()
+    t1.start()
+
+    t2.join(timeout=10)
+    t1.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert "eng_input" in results, f"English didn't complete. results keys: {list(results)}"
+    assert "spa_input" in results, f"Spanish didn't complete. results keys: {list(results)}"
+
+    assert results["eng_input"] == ["I'm ready."], (
+        f"English model input wrong: {results['eng_input']}"
+    )
+    assert results["spa_input"] == ["I 'm ready."], (
+        f"Spanish model input wrong: {results['spa_input']}"
+    )
+
+
+def test_sequential_spanish_requests_produce_identical_output() -> None:
+    """Spanish -> English -> Spanish: both Spanish responses must be identical."""
+
+    svc = SaTSentenceReconstructor(model=RecordingProbabilityModel())
+
+    # Spanish first
+    spa1_evidence = svc.score_boundaries(
+        ["I", "'m ready."],
+        profile=NeutralBoundaryProfile(),
+    )
+    spa1_input = svc._model.calls[:]  # type: ignore[union-attr]
+    svc._model.calls.clear()  # type: ignore[union-attr]
+
+    # English
+    eng_evidence = svc.score_boundaries(
+        ["I", "'m ready."],
+        profile=EnglishBoundaryProfile(),
+    )
+    eng_input = svc._model.calls[:]  # type: ignore[union-attr]
+    svc._model.calls.clear()  # type: ignore[union-attr]
+
+    # Spanish again
+    spa2_evidence = svc.score_boundaries(
+        ["I", "'m ready."],
+        profile=NeutralBoundaryProfile(),
+    )
+    spa2_input = list(svc._model.calls)  # type: ignore[union-attr]
+
+    assert spa1_input == ["I 'm ready."], (
+        f"First Spanish input: {spa1_input}"
+    )
+    assert spa2_input == ["I 'm ready."], (
+        f"Second Spanish input: {spa2_input}"
+    )
+    assert eng_input == ["I'm ready."], (
+        f"English input: {eng_input}"
+    )
+    # Both Spanish evidence must be structurally identical
+    assert len(spa1_evidence) == len(spa2_evidence)
+    for e1, e2 in zip(spa1_evidence, spa2_evidence):
+        assert e1["characterOffset"] == e2["characterOffset"]
+        assert e1["boundaryProbability"] == e2["boundaryProbability"]
