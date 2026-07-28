@@ -47,6 +47,12 @@ from app.subtitles import (
     _normalise_speaker,
 )
 
+from benchmarks.spanish_benchmark_lib import (
+    compute_maturity_level,
+    is_operationally_ready,
+    generate_dataset_report,
+)
+
 
 # ── constants ──────────────────────────────────────────────────────────────
 
@@ -923,458 +929,14 @@ def _generate_review_csv(
             if row.get("chainId") is None:
                 row["chainId"] = ""
 
-            writer.writerow(row)
 
 
-def _compute_maturity_level(entries: list[dict[str, Any]]) -> dict[str, Any]:
-    """Calculate benchmark maturity level based on review progress and coverage.
-
-    Rules:
-      exploratory: 75+ reviewed non-ambiguous boundaries,
-                   meaningful numbers of both reviewed JOIN and BREAK labels
-      usable:      150+ reviewed non-ambiguous boundaries, 2+ productions,
-                   both JOIN and BREAK represented,
-                   dev and test labels reviewed,
-                   at least some completed second review
-      validated:   200+ reviewed non-ambiguous entries,
-                   at least 80% of all entries reviewed,
-                   both JOIN and BREAK adequately represented,
-                   at least 20% second-reviewed,
-                   all disagreements adjudicated,
-                   native-source coverage target documented,
-                   frozen held-out test exists
-    """
-    reviewed_non_ambig = sum(
-        1 for e in entries
-        if e.get("reviewStatus") in ("reviewed", "adjudicated")
-        and e.get("goldLabel") not in (None, "AMBIGUOUS")
-    )
-
-    # Count distinct productions (sources)
-    source_ids = {e["sourceId"] for e in entries}
-    num_productions = len(source_ids)
-
-    # Distinct sampling tags (decision categories)
-    all_tags: set[str] = set()
-    for e in entries:
-        all_tags.update(e.get("samplingTags", []))
-
-    # JOIN-like and BREAK-like categories represented
-    break_like_tags = {"independent_utterance", "short_response",
-                        "dialogue_dash", "unknown_speaker_turn",
-                        "explicit_speaker_change", "inverted_question",
-                        "inverted_exclamation", "ellipsis_or_interruption",
-                        "caption"}
-    join_like_tags = {"join_like", "misleading_period"}
-    has_break_like = bool(all_tags & break_like_tags)
-    has_join_like = bool(all_tags & join_like_tags)
-
-    # Timing dimensions
-    timing_bands = {e.get("timingBand") for e in entries}
-    has_timing_spread = len(timing_bands) >= 3
-
-    # Second-review progress
-    second_reviewed = sum(1 for e in entries if e.get("reviewerCount", 0) >= 2)
-    total_reviewed = sum(1 for e in entries if e.get("reviewStatus") != "unreviewed")
-    second_review_pct = second_reviewed / total_reviewed if total_reviewed else 0.0
-
-    # Split presence
-    has_held_out = any(e.get("split") == "test" for e in entries)
-    has_dev = any(e.get("split") == "dev" for e in entries)
-
-    # Domain diversity via contentStructure
-    content_types_actual: set[str] = set()
-    for e in entries:
-        ct = e.get("contentStructure", "")
-        if ct and ct != "unknown":
-            content_types_actual.add(ct)
-
-    # Count reviewed JOIN and BREAK labels for exploratory threshold
-    reviewed_join = sum(
-        1 for e in entries
-        if e.get("reviewStatus") in ("reviewed", "adjudicated")
-        and e.get("goldLabel") == "JOIN"
-    )
-    reviewed_break = sum(
-        1 for e in entries
-        if e.get("reviewStatus") in ("reviewed", "adjudicated")
-        and e.get("goldLabel") == "BREAK"
-    )
-
-    # Label origin: check that reviewed entries have labelOrigin == "human"
-    all_reviewed_human = all(
-        e.get("labelOrigin") == "human"
-        for e in entries
-        if e.get("reviewStatus") in ("reviewed", "adjudicated")
-    )
-
-    # Disagreement adjudication check for validated
-    adjudicated_count = sum(
-        1 for e in entries if e.get("reviewStatus") == "adjudicated"
-    )
-    needs_adjudication_count = sum(
-        1 for e in entries if e.get("reviewStatus") == "needs_adjudication"
-    )
-    all_disagreements_adjudicated = needs_adjudication_count == 0
-
-    # Native-source coverage (entries where originalSpokenLanguage == "es")
-    native_count = sum(1 for e in entries if e.get("originalSpokenLanguage") == "es")
-
-    # Determinations
-    is_exploratory = (
-        reviewed_non_ambig >= 75
-        and reviewed_join >= 5
-        and reviewed_break >= 5
-        and has_break_like
-        and has_join_like
-    )
-
-    is_usable = (
-        reviewed_non_ambig >= 150
-        and num_productions >= 2
-        and reviewed_join >= 10
-        and reviewed_break >= 10
-        and has_break_like
-        and has_join_like
-        and has_timing_spread
-        and has_dev
-        and has_held_out
-        and second_review_pct > 0
-        and all_reviewed_human
-    )
-
-    is_validated = (
-        reviewed_non_ambig >= 200
-        and total_reviewed >= len(entries) * 0.8
-        and reviewed_join >= 20
-        and reviewed_break >= 20
-        and num_productions >= 2
-        and content_types_actual.issuperset({"dialogue", "monologue"})
-        and has_held_out
-        and second_review_pct >= 0.2
-        and all_disagreements_adjudicated
-        and native_count >= 50
-        and all_reviewed_human
-    )
-
-    if is_validated:
-        level = "validated"
-    elif is_usable:
-        level = "usable"
-    elif is_exploratory:
-        level = "exploratory"
-    else:
-        level = "none"
-
-    return {
-        "maturityLevel": level,
-        "reviewedNonAmbiguous": reviewed_non_ambig,
-        "numProductions": num_productions,
-        "hasBreakLikeCategories": has_break_like,
-        "hasJoinLikeCategories": has_join_like,
-        "hasTimingSpread": has_timing_spread,
-        "hasHeldOutTest": has_held_out,
-        "hasDevSplit": has_dev,
-        "secondReviewPercentage": round(second_review_pct, 3),
-        "nativeSourceEntries": native_count,
-        "contentStructures": sorted(content_types_actual),
-        "reviewedJoin": reviewed_join,
-        "reviewedBreak": reviewed_break,
-        "adjudicatedCount": adjudicated_count,
-        "isFrozen": False,  # updated by policy freeze check
-    }
 
 
-def _is_operationally_ready(
-    entries: list[dict[str, Any]],
-    manifest: list[dict[str, Any]],
-    reference: list[dict[str, Any]],
-) -> bool:
-    """Check if the benchmark meets operational readiness criteria.
-
-    Operational readiness is independent of native-source coverage completeness.
-    Validates:
-      - at least 150 candidate boundaries
-      - at least two distinct productions (sources)
-      - JOIN-like and BREAK-like sampling tag coverage
-      - structural, timing and dialogue coverage
-      - every candidate source exists in the source manifest
-      - every source has all required provenance fields
-      - every source has a valid sourceQualityTier
-      - every selected and context cue exists in the portable reference
-      - no model prediction, probability or generated-label metadata
-      - human-reviewed gold labels do not block readiness
-    """
-    if len(entries) < 150:
-        return False
-
-    source_ids = {e["sourceId"] for e in entries}
-    if len(source_ids) < 2:
-        return False
-
-    # Collect all sampling tags
-    all_tags: set[str] = set()
-    for e in entries:
-        all_tags.update(e.get("samplingTags", []))
-
-    # Need at least some BREAK-like tags and some JOIN-like tags
-    break_like = {"independent_utterance", "short_response",
-                   "dialogue_dash", "unknown_speaker_turn",
-                   "explicit_speaker_change"}
-    join_like = {"join_like", "misleading_period"}
-    if not (all_tags & break_like) or not (all_tags & join_like):
-        return False
-
-    # Timing coverage
-    timing_bands = {e.get("timingBand") for e in entries}
-    if len(timing_bands) < 2:
-        return False
-
-    # Dialogue coverage
-    has_dialogue = any(e.get("contentStructure") == "dialogue" for e in entries)
-    has_dialogue_or_punctuation = has_dialogue or any(
-        "inverted_question" in e.get("samplingTags", []) or
-        "inverted_exclamation" in e.get("samplingTags", [])
-        for e in entries
-    )
-    if not has_dialogue_or_punctuation:
-        return False
-
-    # Every candidate source exists in the source manifest
-    manifest_by_id: dict = {m["sourceId"]: m for m in manifest}
-    for e in entries:
-        src = e["sourceId"]
-        if src not in manifest_by_id:
-            return False
-
-    # Every source has all required provenance fields
-    required_prov = {"sourceId", "title", "contentType", "contentStructure",
-                     "sourceQualityTier", "originalSpokenLanguage",
-                     "subtitleLanguage", "fullSha256", "cueCount"}
-    for m in manifest:
-        missing = required_prov - set(m.keys())
-        if missing:
-            return False
-
-    # Every source has a valid sourceQualityTier
-    valid_tiers = {"native_original", "professional_translation",
-                   "community_translation", "reviewed_machine_transcription",
-                   "unknown"}
-    for m in manifest:
-        tier = m.get("sourceQualityTier", "")
-        if tier not in valid_tiers:
-            return False
-
-    # Every selected and context cue exists in the portable reference
-    by_source_cue: dict[str, set[str]] = {}
-    for ref in reference:
-        src = ref["sourceId"]
-        if src not in by_source_cue:
-            by_source_cue[src] = set()
-        by_source_cue[src].add(ref["cueId"])
-
-    for e in entries:
-        src = e["sourceId"]
-        ref_cues = by_source_cue.get(src, set())
-        for side in ("left", "right"):
-            cid = e[f"{side}CueId"]
-            if cid not in ref_cues:
-                return False
-        for ctx_list_key in ("previousContext", "nextContext"):
-            for ctx in e.get(ctx_list_key, []):
-                ctx_id = ctx["cueId"]
-                if ctx_id not in ref_cues:
-                    return False
-
-    # No model prediction, probability or generated-label metadata
-    forbidden = {"modelProbability", "modelPrediction", "modelScore",
-                 "saTScore", "prediction", "model", "evidence"}
-    for e in entries:
-        found = forbidden & set(e.keys())
-        if found:
-            return False
-
-    # Human-reviewed gold labels do not block readiness (labelOrigin == "human" is fine)
-    # Non-human non-null labels would have been caught by forbidden fields check above
-
-    return True
 
 
-def _generate_dataset_report(
-    entries: list[dict[str, Any]],
-    manifest: list[dict[str, Any]],
-    reference: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Generate comprehensive dataset report."""
-    from collections import Counter, defaultdict
-    manifest_by_id: dict = {m["sourceId"]: m for m in manifest}
-    source_counts: Counter = Counter()
-    for e in entries:
-        source_counts[e["sourceId"]] += 1
 
-    # Per region/variant
-    region_counts: Counter = Counter()
-    for e in entries:
-        src = e["sourceId"]
-        var = manifest_by_id.get(src, {}).get("spanishVariant", "unknown")
-        region_counts[var] += 1
 
-    # Per content type
-    type_counts: Counter = Counter()
-    for e in entries:
-        src = e["sourceId"]
-        ctype = manifest_by_id.get(src, {}).get("contentType", "other")
-        type_counts[ctype] += 1
-
-    # Per source quality tier
-    tier_counts: Counter = Counter()
-    for e in entries:
-        tier_counts[e.get("sourceQualityTier", "unknown")] += 1
-
-    # Per content structure (dialogue vs monologue)
-    structure_counts: Counter = Counter()
-    for e in entries:
-        structure_counts[e.get("contentStructure", "unknown")] += 1
-
-    # Per original spoken language
-    lang_counts: Counter = Counter()
-    for e in entries:
-        lang_counts[e.get("originalSpokenLanguage", "unknown")] += 1
-
-    # Sampling tag counts
-    tag_counts: Counter = Counter()
-    for e in entries:
-        for tag in e.get("samplingTags", []):
-            tag_counts[tag] += 1
-
-    # Timing band counts
-    timing_counts: Counter = Counter()
-    for e in entries:
-        timing_counts[e.get("timingBand", "unknown")] += 1
-
-    # Split counts
-    dev_count = sum(1 for e in entries if e.get("split") == "dev")
-    test_count = sum(1 for e in entries if e.get("split") == "test")
-
-    # Dev/test tag coverage
-    dev_tags: Counter = Counter()
-    test_tags: Counter = Counter()
-    for e in entries:
-        split = e.get("split", "")
-        for tag in e.get("samplingTags", []):
-            if split == "dev":
-                dev_tags[tag] += 1
-            elif split == "test":
-                test_tags[tag] += 1
-
-    # Multiline count
-    multiline_left = sum(1 for e in entries if "multiline_cue_left" in e.get("structureTags", []))
-    multiline_right = sum(1 for e in entries if "multiline_cue_right" in e.get("structureTags", []))
-    multiline = sum(1 for e in entries if "multiline_cue_left" in e.get("structureTags", [])
-                    or "multiline_cue_right" in e.get("structureTags", []))
-
-    # Multiple speaker count
-    multi_speaker = sum(
-        1 for e in entries
-        if e.get("speakerMarkers", {})
-        .get("left", {})
-        .get("contains_multiple_speakers", False)
-        or e.get("speakerMarkers", {})
-        .get("right", {})
-        .get("contains_multiple_speakers", False)
-    )
-
-    # Chain count
-    chain_ids = set()
-    for e in entries:
-        cid = e.get("chainId")
-        if cid:
-            chain_ids.add(cid)
-
-    unreviewed = sum(1 for e in entries if e.get("reviewStatus") == "unreviewed")
-    human_labeled = sum(1 for e in entries if e.get("labelOrigin") == "human")
-
-    # Review progress
-    reviewed = sum(1 for e in entries if e.get("reviewStatus") in ("reviewed", "adjudicated"))
-    needs_second = sum(1 for e in entries if e.get("needsSecondReview"))
-    second_done = sum(1 for e in entries if e.get("reviewerCount", 0) >= 2)
-    ambiguous = sum(1 for e in entries if e.get("goldLabel") == "AMBIGUOUS")
-
-    # Maturity calculation
-    maturity = _compute_maturity_level(entries)
-
-    # Operational readiness
-    op_ready = _is_operationally_ready(entries, manifest, reference)
-
-    # Source provenance
-    source_provenance = []
-    for m in manifest:
-        sid = m["sourceId"]
-        source_provenance.append({
-            "sourceId": sid,
-            "contentType": m.get("contentType", "other"),
-            "contentStructure": m.get("contentStructure", "unknown"),
-            "originalSpokenLanguage": m.get("originalSpokenLanguage", "unknown"),
-            "spanishVariant": m.get("spanishVariant", "unknown"),
-            "sourceQualityTier": m.get("sourceQualityTier", "unknown"),
-            "translationType": m.get("translationType", "unknown"),
-            "candidatesInBenchmark": source_counts.get(sid, 0),
-        })
-
-    report: dict[str, Any] = {
-        "datasetReport": {
-            "reportVersion": "2.0",
-            "created": "2026-07-28",
-        },
-        "sourceProvenance": source_provenance,
-        "overview": {
-            "totalCandidates": len(entries),
-            "totalSources": len(source_counts),
-            "devCount": dev_count,
-            "testCount": test_count,
-            "devRatio": round(dev_count / len(entries), 3) if entries else 0,
-            "unreviewed": unreviewed,
-            "humanLabeledCount": human_labeled,
-            "multilineCues": multiline,
-            "multilineLeft": multiline_left,
-            "multilineRight": multiline_right,
-            "multipleSpeakerCues": multi_speaker,
-            "chainCount": len(chain_ids),
-        },
-        "reviewProgress": {
-            "unreviewed": unreviewed,
-            "reviewed": reviewed,
-            "needsSecondReview": needs_second,
-            "secondReviewCompleted": second_done,
-            "ambiguousExcluded": ambiguous,
-        },
-        "metricStrata": {
-            "candidatesPerSource": dict(source_counts.most_common()),
-            "candidatesPerRegion": dict(region_counts.most_common()),
-            "candidatesPerContentType": dict(type_counts.most_common()),
-            "candidatesPerQualityTier": dict(tier_counts.most_common()),
-            "candidatesPerContentStructure": dict(structure_counts.most_common()),
-            "candidatesPerOriginalLanguage": dict(lang_counts.most_common()),
-        },
-        "samplingTagCounts": dict(tag_counts.most_common()),
-        "timingBandCounts": dict(timing_counts.most_common()),
-        "devTestCoverage": {
-            "devCount": dev_count,
-            "testCount": test_count,
-            "devTagCoverage": dict(dev_tags.most_common()),
-            "testTagCoverage": dict(test_tags.most_common()),
-        },
-        "benchmarkOperationallyReady": op_ready,
-        "nativeCoverageTargetMet": False,
-        "knownLimitations": [
-            "No dialogue-heavy source originally spoken in Spanish from Spain exists.",
-            "No dialogue-heavy source originally spoken in Spanish from Latin America exists.",
-            "The only originally-Spanish source (ted_tales_es) is a TED monologue, not dialogue-heavy.",
-            "The only dialogue-heavy source (the_goat_life_es) is translated from Malayalam; provenance is community translation, not professionally verified.",
-        ],
-        "maturity": maturity,
-    }
-    return report
 
 
 def _validate_extraction(
@@ -1574,7 +1136,7 @@ def main() -> None:
     unreviewed = sum(1 for b in sampled if b.get("reviewStatus") == "unreviewed")
     print(f"Unreviewed: {unreviewed}")
 
-    maturity = _compute_maturity_level(sampled)
+    maturity = compute_maturity_level(sampled)
     print(f"Maturity: {maturity['maturityLevel']} "
           f"({maturity['reviewedNonAmbiguous']} reviewed non-ambiguous)")
 
@@ -1592,7 +1154,7 @@ def main() -> None:
     print(f"Saved reference manifest ({len(ref)} cue records) to {ref_path}")
 
     # Operational readiness (requires reference manifest)
-    op_ready = _is_operationally_ready(sampled, manifest_sources, ref)
+    op_ready = is_operationally_ready(sampled, manifest_sources, ref)
     print(f"Operationally ready: {op_ready}")
 
     csv_path = args.output.with_suffix(".csv")
@@ -1600,7 +1162,7 @@ def main() -> None:
     print(f"Saved CSV review to {csv_path}")
 
     # Dataset report
-    report = _generate_dataset_report(sampled, manifest_sources, ref)
+    report = generate_dataset_report(sampled, manifest_sources, ref)
     report_path = args.output.parent / "spanish_boundary_dataset_report.json"
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)

@@ -8,10 +8,10 @@ Usage:
         --output review_queue.csv
 
 Round 1: All entries in the given split, in deterministic order.
-Round 2: Prioritizes JOIN entries with medium/low confidence from round 1,
-         hides the first reviewer's label/confidence, fills to 20% coverage.
-
-Round 1 excludes entries already reviewed in the ledger.
+Round 2: Only boundaries with a valid round-one review from a different reviewer,
+         without an existing round-two review from this reviewer,
+         and not already adjudicated. Prioritizes JOIN medium/low confidence
+         and needsSecondReview entries. Fills to ~20% double-review target.
 """
 
 from __future__ import annotations
@@ -62,13 +62,12 @@ def get_reviewed_keys(events: list[dict]) -> set[str]:
 def get_first_review_per_boundary(
     events: list[dict],
 ) -> dict[str, dict]:
-    """Return the first review event per boundary."""
+    """Return the first review event per boundary (review events only, not adjudication)."""
     first: dict[str, dict] = {}
     for ev in events:
         bid = ev.get("boundaryId", "")
         if bid and bid not in first:
-            # Only regular reviews, not adjudications
-            if ev.get("reviewRound", 0) >= 1:
+            if ev.get("eventType") == "review" and ev.get("reviewRound", 0) == 1:
                 first[bid] = ev
     return first
 
@@ -80,9 +79,31 @@ def get_reviewer_events(
     result: dict[str, dict] = {}
     for ev in events:
         bid = ev.get("boundaryId", "")
-        if bid and ev.get("reviewerId") == reviewer_id and ev.get("reviewRound", 0) >= 1:
+        if bid and ev.get("reviewerId") == reviewer_id and ev.get("eventType") == "review":
             result[bid] = ev
     return result
+
+
+def get_adjudicated_keys(events: list[dict]) -> set[str]:
+    """Return set of boundary keys that have been adjudicated."""
+    keys: set[str] = set()
+    for ev in events:
+        if ev.get("eventType") == "adjudication":
+            bid = ev.get("boundaryId", "")
+            if bid:
+                keys.add(bid)
+    return keys
+
+
+def get_round_two_keys(events: list[dict]) -> set[str]:
+    """Return set of boundary keys that already have a round-two review."""
+    keys: set[str] = set()
+    for ev in events:
+        if ev.get("eventType") == "review" and ev.get("reviewRound") == 2:
+            bid = ev.get("boundaryId", "")
+            if bid:
+                keys.add(bid)
+    return keys
 
 
 def prepare_queue(args: argparse.Namespace) -> None:
@@ -146,73 +167,135 @@ def _prepare_round2(
     reviewer: str,
     output: Path,
 ) -> None:
-    """Round 2: prioritize JOIN medium/low confidence, hide first reviewer's labels."""
+    """Round 2: boundaries with a valid round-one review from a DIFFERENT reviewer,
+    no existing round-two review from this reviewer, not adjudicated.
+    Prioritizes JOIN medium/low confidence and needsSecondReview.
+    Never includes unreviewed boundaries.
+    """
     rng = random.Random(42)
 
-    # Find entries the current reviewer has already reviewed
+    # Get adjudicated keys - these are excluded from round two
+    adjudicated_keys = get_adjudicated_keys(events)
+
+    # Get boundaries already having round-two reviews
+    round_two_keys = get_round_two_keys(events)
+
+    # Find entries the current reviewer has already reviewed (any round)
     reviewer_events = get_reviewer_events(events, reviewer)
     reviewer_keys = set(reviewer_events.keys())
 
-    # Find entries that need second review:
-    # JOIN entries with medium/low confidence from OTHER reviewers
+    # Get first round-one reviews per boundary
     all_first_reviews = get_first_review_per_boundary(events)
 
-    needs_second: list[dict] = []
+    # Build a set of entries that are eligible for round two:
+    # 1. Have a valid round-one review
+    # 2. Reviewed by a DIFFERENT reviewer (not the current one)
+    # 3. Current reviewer hasn't already done round two on this
+    # 4. Not already adjudicated
+    # 5. In the target split
+    eligible: list[dict] = []
+    split_entry_map: dict[str, dict] = {}
+    for e in split_entries:
+        key = build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"])
+        split_entry_map[key] = e
+
     for bid, ev in all_first_reviews.items():
-        # Skip if current reviewer already reviewed this
+        # Skip if current reviewer was the first reviewer
+        if ev.get("reviewerId") == reviewer:
+            continue
+        # Skip if current reviewer already reviewed this boundary (any round)
         if bid in reviewer_keys:
             continue
-        # Skip if not in our split
-        matching = [
-            e for e in split_entries
-            if build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"]) == bid
-        ]
-        if not matching:
+        # Skip if this boundary already has a round-two review
+        if bid in round_two_keys:
             continue
+        # Skip if adjudicated
+        if bid in adjudicated_keys:
+            continue
+        # Skip if not in our split
+        if bid not in split_entry_map:
+            continue
+
+        entry = split_entry_map[bid]
         label = ev.get("label", "")
         confidence = ev.get("confidence", "")
-        if label == "JOIN" and confidence in ("medium", "low"):
-            needs_second.append(matching[0])
+
+        # Attach metadata from the first review for prioritization
+        # (the first reviewer's label/confidence/reason/identity are NOT exposed in output)
+        entry["_first_label"] = label
+        entry["_first_confidence"] = confidence
+        entry["_needs_second"] = (
+            label == "JOIN" and confidence in ("medium", "low")
+        )
+        eligible.append(entry)
 
     # Deduplicate
     seen: set[str] = set()
-    unique_needs_second: list[dict] = []
-    for e in needs_second:
+    unique_eligible: list[dict] = []
+    for e in eligible:
         key = build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"])
         if key not in seen:
             seen.add(key)
-            unique_needs_second.append(e)
+            unique_eligible.append(e)
 
-    # Calculate coverage target: at least 20% of all entries (approx)
-    total_entries = len(split_entries)
-    target = max(len(unique_needs_second), int(total_entries * 0.2) + 1)
-    target = min(target, total_entries)  # cap at total entries available
+    # Priority sorting:
+    # 1. JOIN + medium confidence
+    # 2. JOIN + low confidence
+    # 3. needsSecondReview (other reasons)
+    # 4. All other eligible boundaries
+    def priority(e: dict) -> tuple:
+        fl = e.get("_first_label", "")
+        fc = e.get("_first_confidence", "")
+        ns = e.get("_needs_second", False)
+        # Priority 0: JOIN + medium
+        if fl == "JOIN" and fc == "medium":
+            return (0,)
+        # Priority 1: JOIN + low
+        if fl == "JOIN" and fc == "low":
+            return (1,)
+        # Priority 2: needsSecondReview (other)
+        if ns:
+            return (2,)
+        # Priority 3: everything else eligible
+        return (3,)
 
-    # Start with prioritized entries
+    unique_eligible.sort(key=priority)
+
+    # Calculate target: at least 20% of split entries, but at most available
+    total_in_split = len(split_entries)
+    target = max(1, int(total_in_split * 0.2))
+    target = min(target, len(unique_eligible))
+
+    # Select the top-priority entries
     selected_keys: set[str] = set()
     queue: list[dict] = []
 
-    for e in unique_needs_second:
-        key = build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"])
-        if key not in selected_keys:
-            selected_keys.add(key)
-            queue.append(e)
-
-    # Fill remaining with random entries (deterministic)
-    remaining_candidates = [
-        e for e in split_entries
-        if build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"]) not in selected_keys
-        and build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"]) not in reviewer_keys
-    ]
-    rng.shuffle(remaining_candidates)
-
-    for e in remaining_candidates:
+    for e in unique_eligible:
         if len(queue) >= target:
             break
         key = build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"])
         if key not in selected_keys:
             selected_keys.add(key)
             queue.append(e)
+
+    # If we still have room, add more eligible boundaries (deterministic)
+    remaining = [e for e in unique_eligible
+                 if build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"]) not in selected_keys]
+    rng.shuffle(remaining)
+
+    for e in remaining:
+        if len(queue) >= target:
+            break
+        key = build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"])
+        if key not in selected_keys:
+            selected_keys.add(key)
+            queue.append(e)
+
+    # Strip internal metadata before writing
+    for e in queue:
+        e.pop("_first_label", None)
+        e.pop("_first_confidence", None)
+        e.pop("_needs_second", None)
 
     # Sort for deterministic output
     queue.sort(key=lambda e: (e["sourceId"], int(e["leftCueId"]) if e["leftCueId"].lstrip("-").isdigit() else e["leftCueId"]))
@@ -307,7 +390,6 @@ def main() -> None:
         help="Output CSV path",
     )
     args = parser.parse_args()
-
     prepare_queue(args)
 
 

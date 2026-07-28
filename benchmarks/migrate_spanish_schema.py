@@ -22,7 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 # Import the builder's report function
-from benchmarks.build_spanish_boundary_candidates import _generate_dataset_report
+from benchmarks.spanish_benchmark_lib import generate_dataset_report, load_policy_freeze
 
 BENCHMARK_DIR = PROJECT_ROOT / "benchmarks"
 CANDIDATES_PATH = BENCHMARK_DIR / "spanish_boundary_candidates.json"
@@ -97,8 +97,11 @@ def main() -> None:
     save_json(CANDIDATES_PATH, candidates)
 
     # Regenerate dataset report
+    from pathlib import Path as _Path
+    policy_freeze_path = BENCHMARK_DIR / "spanish_policy_freeze.json"
+    policy_freeze = load_policy_freeze(_Path(policy_freeze_path))
     print("\nRegenerating dataset report...")
-    report = _generate_dataset_report(candidates, sources)
+    report = generate_dataset_report(candidates, sources, [], policy_freeze)
     print(f"  benchmarkOperationallyReady: {report.get('benchmarkOperationallyReady')}")
     print(f"  nativeCoverageTargetMet: {report.get('nativeCoverageTargetMet')}")
     maturity = report.get("maturity", {})
@@ -107,21 +110,8 @@ def main() -> None:
     print(f"\nSaving report to {REPORT_PATH}")
     save_json(REPORT_PATH, report)
 
-    # Also update the manifest with new readiness fields if not present
-    if "benchmarkOperationallyReady" not in manifest:
-        manifest["benchmarkOperationallyReady"] = False
-        manifest["nativeCoverageTargetMet"] = False
-        manifest["knownLimitations"] = [
-            "No dialogue-heavy source originally spoken in Spanish from Spain exists.",
-            "No dialogue-heavy source originally spoken in Spanish from Latin America exists.",
-            "The only originally-Spanish source (ted_tales_es) is a TED monologue, not dialogue-heavy.",
-            "The only dialogue-heavy source (the_goat_life_es) is translated from Malayalam; provenance is community translation, not professionally verified.",
-        ]
-        print("\nRe-saving manifest with readiness fields")
-        # Clean up old fields
-        manifest.pop("minimumRequirementsMet", None)
-        manifest.pop("minimumRequirementsNotes", None)
-        save_json(MANIFEST_PATH, manifest)
+    # Do not modify manifest with readiness fields — source manifest
+    # contains immutable source provenance only.
 
     # Print stratum summary
     strata = report.get("metricStrata", {})

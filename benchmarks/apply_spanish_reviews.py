@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,9 +28,15 @@ LEDGER_PATH = BENCHMARK_DIR / "spanish_boundary_reviews.jsonl"
 MANIFEST_PATH = BENCHMARK_DIR / "spanish_source_manifest.json"
 REFERENCE_PATH = BENCHMARK_DIR / "spanish_reference_manifest.json"
 REPORT_PATH = BENCHMARK_DIR / "spanish_boundary_dataset_report.json"
-from build_spanish_boundary_candidates import (  # type: ignore[import-not-found]
-    _compute_maturity_level,
-    _is_operationally_ready,
+POLICY_FREEZE_PATH = BENCHMARK_DIR / "spanish_policy_freeze.json"
+
+from benchmarks.spanish_benchmark_lib import (
+    build_boundary_key,
+    derive_review_state,
+    generate_dataset_report,
+    load_policy_freeze,
+    validate_ledger_events,
+    validate_label_origin_consistency,
 )
 
 
@@ -59,163 +64,40 @@ def group_events_by_boundary(
     return dict(grouped)
 
 
-def derive_review_state(
-    events: list[dict],
-) -> dict:
-    """Derive final review state from a boundary's events.
-
-    Returns dict with keys:
-        goldLabel, labelConfidence, reviewerCount, needsSecondReview,
-        reviewReason, reviewStatus, labelOrigin
-    """
-    # Default unreviewed state
-    state: dict = {
-        "goldLabel": None,
-        "labelConfidence": None,
-        "reviewerCount": 0,
-        "needsSecondReview": False,
-        "reviewReason": "",
-        "reviewStatus": "unreviewed",
-        "labelOrigin": None,
-    }
-
-    if not events:
-        return state
-
-    # Separate regular reviews from adjudications
-    reviews = [e for e in events if e.get("reviewRound", 0) >= 1 and e.get("label")]
-    adjudications = [
-        e for e in events
-        if e.get("reviewRound", 0) == 0  # adjudication marker
-        and e.get("label")
-    ]
-
-    # If there's an adjudication event, use it
-    if adjudications:
-        adj = adjudications[-1]  # last adjudication wins
-        confidence = adj.get("confidence", "medium")
-        label = adj.get("label", "AMBIGUOUS")
-        # Low-confidence final decisions become AMBIGUOUS
-        if confidence == "low" and label != "AMBIGUOUS":
-            label = "AMBIGUOUS"
-            confidence = "low"
-
-        state.update({
-            "goldLabel": label,
-            "labelConfidence": confidence,
-            "reviewerCount": len(reviews) + len(adjudications),
-            "needsSecondReview": False,
-            "reviewReason": adj.get("reason", ""),
-            "reviewStatus": "adjudicated",
-            "labelOrigin": "human",
-        })
-        return state
-
-    # Count unique reviewers
-    reviewer_ids: list[str] = []
-    seen_reviewers: set[str] = set()
-    for e in reviews:
-        rid = e.get("reviewerId", "")
-        if rid and rid not in seen_reviewers:
-            seen_reviewers.add(rid)
-            reviewer_ids.append(rid)
-
-    reviewer_count = len(seen_reviewers)
-
-    if reviewer_count == 0:
-        return state
-
-    # Get the latest review per unique reviewer
-    latest_per_reviewer: dict[str, dict] = {}
-    for e in reviews:
-        rid = e.get("reviewerId", "")
-        if rid:
-            latest_per_reviewer[rid] = e
-
-    review_list = list(latest_per_reviewer.values())
-
-    if reviewer_count == 1:
-        r = review_list[0]
-        label = r.get("label")
-        confidence = r.get("confidence", "medium")
-        reason = r.get("reason", "")
-
-        # Low confidence -> AMBIGUOUS
-        if confidence == "low" and label != "AMBIGUOUS":
-            label = "AMBIGUOUS"
-            confidence = "low"
-
-        needs_second = (
-            label == "JOIN" and confidence in ("medium", "low")
-        )
-
-        state.update({
-            "goldLabel": label,
-            "labelConfidence": confidence,
-            "reviewerCount": reviewer_count,
-            "needsSecondReview": needs_second,
-            "reviewReason": reason,
-            "reviewStatus": "reviewed",
-            "labelOrigin": "human",
-        })
-        return state
-
-    # Two or more reviews - check agreement
-    labels = set(r.get("label") for r in review_list)
-
-    if len(labels) == 1:
-        # Agreeing reviews
-        r = review_list[0]
-        label = r.get("label")
-        confidence = r.get("confidence", "medium")
-        reason = r.get("reason", "")
-
-        if confidence == "low" and label != "AMBIGUOUS":
-            label = "AMBIGUOUS"
-            confidence = "low"
-
-        state.update({
-            "goldLabel": label,
-            "labelConfidence": confidence,
-            "reviewerCount": reviewer_count,
-            "needsSecondReview": False,
-            "reviewReason": f"Agreed: {reason}" if reason else "Agreed",
-            "reviewStatus": "reviewed",
-            "labelOrigin": "human",
-        })
-        return state
-
-    # Disagreement
-    reason = "; ".join(
-        f"R{e.get('reviewerId', '?')}: {e.get('label', '?')} ({e.get('reason', '')})"
-        for e in review_list
-    )
-    state.update({
-        "goldLabel": None,
-        "labelConfidence": None,
-        "reviewerCount": reviewer_count,
-        "needsSecondReview": True,
-        "reviewReason": f"Disagreement: {reason}",
-        "reviewStatus": "needs_adjudication",
-        "labelOrigin": "human",
-    })
-    return state
-
-
-def build_boundary_key(
-    source_id: str, left_cue_id: str, right_cue_id: str,
-) -> str:
-    return f"{source_id}:{left_cue_id}:{right_cue_id}"
-
-
 def apply_reviews() -> None:
-    """Read everything, derive state, write updated fixture and report."""
+    """Read everything, validate, derive state, write updated fixture and report."""
     # Load fixture
     with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
         entries: list[dict] = json.load(f)
 
-    # Load ledger
+    # Load manifest and reference
+    with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+        manifest_data: dict = json.load(f)
+    manifest = manifest_data.get("sources", [])
+
+    with open(REFERENCE_PATH, "r", encoding="utf-8") as f:
+        reference: list[dict] = json.load(f)
+
+    # Load policy freeze
+    policy_freeze = load_policy_freeze(POLICY_FREEZE_PATH)
+
+    # Build valid boundary IDs
+    valid_boundary_ids: set[str] = set()
+    for entry in entries:
+        valid_boundary_ids.add(build_boundary_key(
+            entry["sourceId"], entry["leftCueId"], entry["rightCueId"],
+        ))
+
+    # Load and validate ledger
     events = load_ledger(LEDGER_PATH)
+    if events:
+        validation_errors = validate_ledger_events(events, valid_boundary_ids)
+        if validation_errors:
+            for err in validation_errors:
+                print(f"Ledger validation error: {err}", file=sys.stderr)
+            print("ERROR: Ledger validation failed. Fix events before applying.", file=sys.stderr)
+            sys.exit(1)
+
     grouped = group_events_by_boundary(events)
 
     # Apply derived state
@@ -235,205 +117,24 @@ def apply_reviews() -> None:
         entry["reviewStatus"] = state["reviewStatus"]
         entry["labelOrigin"] = state["labelOrigin"]
 
+    # Validate label-origin consistency
+    lo_errors = validate_label_origin_consistency(entries)
+    if lo_errors:
+        for err in lo_errors:
+            print(f"Label-origin error: {err}", file=sys.stderr)
+        print("ERROR: Label-origin consistency check failed.", file=sys.stderr)
+        sys.exit(1)
+
     # Write updated fixture
     with open(FIXTURE_PATH, "w", encoding="utf-8") as f:
         json.dump(entries, f, ensure_ascii=False, indent=2)
     print(f"Updated {len(entries)} entries in {FIXTURE_PATH.name}")
 
-    # Regenerate report
-    _regenerate_report(entries)
-    print(f"Regenerated {REPORT_PATH.name}")
-
-
-def _regenerate_report(entries: list[dict]) -> None:
-    """Regenerate dataset report to reflect updated review state."""
-    from collections import Counter
-
-    # Load manifest and reference
-    with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-        manifest_data: dict = json.load(f)
-    manifest = manifest_data.get("sources", [])
-
-    with open(REFERENCE_PATH, "r", encoding="utf-8") as f:
-        reference: list[dict] = json.load(f)
-
-    manifest_by_id: dict = {m["sourceId"]: m for m in manifest}
-    source_counts: Counter = Counter()
-    for e in entries:
-        source_counts[e["sourceId"]] += 1
-
-    # Per region/variant
-    region_counts: Counter = Counter()
-    for e in entries:
-        src = e["sourceId"]
-        var = manifest_by_id.get(src, {}).get("spanishVariant", "unknown")
-        region_counts[var] += 1
-
-    # Per content type
-    type_counts: Counter = Counter()
-    for e in entries:
-        src = e["sourceId"]
-        ctype = manifest_by_id.get(src, {}).get("contentType", "other")
-        type_counts[ctype] += 1
-
-    # Per source quality tier
-    tier_counts: Counter = Counter()
-    for e in entries:
-        tier_counts[e.get("sourceQualityTier", "unknown")] += 1
-
-    # Per content structure
-    structure_counts: Counter = Counter()
-    for e in entries:
-        structure_counts[e.get("contentStructure", "unknown")] += 1
-
-    # Per original spoken language
-    lang_counts: Counter = Counter()
-    for e in entries:
-        lang_counts[e.get("originalSpokenLanguage", "unknown")] += 1
-
-    # Sampling tag counts
-    tag_counts: Counter = Counter()
-    for e in entries:
-        for tag in e.get("samplingTags", []):
-            tag_counts[tag] += 1
-
-    # Timing band counts
-    timing_counts: Counter = Counter()
-    for e in entries:
-        timing_counts[e.get("timingBand", "unknown")] += 1
-
-    # Split counts
-    dev_count = sum(1 for e in entries if e.get("split") == "dev")
-    test_count = sum(1 for e in entries if e.get("split") == "test")
-
-    # Dev/test tag coverage
-    dev_tags: Counter = Counter()
-    test_tags: Counter = Counter()
-    for e in entries:
-        split = e.get("split", "")
-        for tag in e.get("samplingTags", []):
-            if split == "dev":
-                dev_tags[tag] += 1
-            elif split == "test":
-                test_tags[tag] += 1
-
-    # Multiline count
-    multiline_left = sum(
-        1 for e in entries if "multiline_cue_left" in e.get("structureTags", [])
-    )
-    multiline_right = sum(
-        1 for e in entries if "multiline_cue_right" in e.get("structureTags", [])
-    )
-    multiline = sum(
-        1 for e in entries
-        if "multiline_cue_left" in e.get("structureTags", [])
-        or "multiline_cue_right" in e.get("structureTags", [])
-    )
-
-    # Multiple speaker count
-    multi_speaker = sum(
-        1 for e in entries
-        if e.get("speakerMarkers", {})
-        .get("left", {})
-        .get("contains_multiple_speakers", False)
-        or e.get("speakerMarkers", {})
-        .get("right", {})
-        .get("contains_multiple_speakers", False)
-    )
-
-    # Chain count
-    chain_ids = set()
-    for e in entries:
-        cid = e.get("chainId")
-        if cid:
-            chain_ids.add(cid)
-
-    unreviewed = sum(1 for e in entries if e.get("reviewStatus") == "unreviewed")
-    human_labeled = sum(1 for e in entries if e.get("labelOrigin") == "human")
-
-    # Review progress
-    reviewed = sum(
-        1 for e in entries if e.get("reviewStatus") in ("reviewed", "adjudicated")
-    )
-    needs_second = sum(1 for e in entries if e.get("needsSecondReview"))
-    second_done = sum(1 for e in entries if e.get("reviewerCount", 0) >= 2)
-    ambiguous = sum(1 for e in entries if e.get("goldLabel") == "AMBIGUOUS")
-
-    # Maturity and readiness
-    maturity = _compute_maturity_level(entries)
-    op_ready = _is_operationally_ready(entries, manifest, reference)
-
-    # Source provenance
-    source_provenance = []
-    for m in manifest:
-        sid = m["sourceId"]
-        source_provenance.append({
-            "sourceId": sid,
-            "contentType": m.get("contentType", "other"),
-            "contentStructure": m.get("contentStructure", "unknown"),
-            "originalSpokenLanguage": m.get("originalSpokenLanguage", "unknown"),
-            "spanishVariant": m.get("spanishVariant", "unknown"),
-            "sourceQualityTier": m.get("sourceQualityTier", "unknown"),
-            "translationType": m.get("translationType", "unknown"),
-            "candidatesInBenchmark": source_counts.get(sid, 0),
-        })
-
-    report: dict = {
-        "datasetReport": {
-            "reportVersion": "2.0",
-            "created": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-        },
-        "sourceProvenance": source_provenance,
-        "overview": {
-            "totalCandidates": len(entries),
-            "totalSources": len(source_counts),
-            "devCount": dev_count,
-            "testCount": test_count,
-            "devRatio": round(dev_count / len(entries), 3) if entries else 0,
-            "unreviewed": unreviewed,
-            "humanLabeledCount": human_labeled,
-            "multilineCues": multiline,
-            "multilineLeft": multiline_left,
-            "multilineRight": multiline_right,
-            "multipleSpeakerCues": multi_speaker,
-            "chainCount": len(chain_ids),
-        },
-        "reviewProgress": {
-            "unreviewed": unreviewed,
-            "reviewed": reviewed,
-            "needsSecondReview": needs_second,
-            "secondReviewCompleted": second_done,
-            "ambiguousExcluded": ambiguous,
-        },
-        "metricStrata": {
-            "candidatesPerSource": dict(source_counts.most_common()),
-            "candidatesPerRegion": dict(region_counts.most_common()),
-            "candidatesPerContentType": dict(type_counts.most_common()),
-            "candidatesPerQualityTier": dict(tier_counts.most_common()),
-            "candidatesPerContentStructure": dict(structure_counts.most_common()),
-            "candidatesPerOriginalLanguage": dict(lang_counts.most_common()),
-        },
-        "samplingTagCounts": dict(tag_counts.most_common()),
-        "timingBandCounts": dict(timing_counts.most_common()),
-        "devTestCoverage": {
-            "devCount": dev_count,
-            "testCount": test_count,
-            "devTagCoverage": dict(dev_tags.most_common()),
-            "testTagCoverage": dict(test_tags.most_common()),
-        },
-        "benchmarkOperationallyReady": op_ready,
-        "nativeCoverageTargetMet": False,
-        "knownLimitations": [
-            "No dialogue-heavy source originally spoken in Spanish from Spain exists.",
-            "No dialogue-heavy source originally spoken in Spanish from Latin America exists.",
-            "The only originally-Spanish source (ted_tales_es) is a TED monologue, not dialogue-heavy.",
-            "The only dialogue-heavy source (the_goat_life_es) is translated from Malayalam; provenance is community translation, not professionally verified.",
-        ],
-        "maturity": maturity,
-    }
-
+    # Regenerate report using shared function
+    report = generate_dataset_report(entries, manifest, reference, policy_freeze)
     with open(REPORT_PATH, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
+    print(f"Regenerated {REPORT_PATH.name}")
 
 
 def main() -> None:

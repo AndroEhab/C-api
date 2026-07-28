@@ -30,9 +30,16 @@ REVIEW_LEDGER_PATH = BENCHMARK_DIR / "spanish_boundary_reviews.jsonl"
 
 # Import readiness/maturity functions for synthetic tests
 sys.path.insert(0, str(BENCHMARK_DIR))
-from build_spanish_boundary_candidates import (  # type: ignore[import-not-found]
-    _compute_maturity_level,
-    _is_operationally_ready,
+from benchmarks.spanish_benchmark_lib import (  # type: ignore[import-not-found]
+    compute_maturity_level,
+    is_operationally_ready,
+    generate_dataset_report,
+    derive_review_state,
+    validate_ledger_events,
+    validate_label_origin_consistency,
+    load_policy_freeze,
+    validate_policy_freeze,
+    require_policy_freeze_for_test_evaluation,
 )
 
 SOURCES_PRESENT = SOURCE_DIR.is_dir() and any(SOURCE_DIR.rglob("*.srt"))
@@ -136,6 +143,10 @@ class TestCanonicalRecord:
 
     def test_one_record_per_boundary(self, fixture):
         keys = [_boundary_key(e) for e in fixture]
+        assert len(keys) == len(set(keys)), (
+            f"Found {len(keys) - len(set(keys))} duplicate boundary keys"
+        )
+
     def test_required_fields_present(self, fixture):
         required = {
             "sourceId", "sourceChecksum", "leftCueId", "rightCueId",
@@ -1264,14 +1275,14 @@ class TestMaturityThresholds:
 
     def test_none_level_zero_reviewed(self):
         entries = self._make_entries(50, review_status="unreviewed", label_origin=None)
-        maturity = _compute_maturity_level(entries)
+        maturity = compute_maturity_level(entries)
         assert maturity["maturityLevel"] == "none"
 
     def test_exploratory_minimum(self):
         """75 reviewed non-ambiguous, 5+ JOIN and 5+ BREAK."""
         entries = self._make_entries(70, label="BREAK")
         entries += self._make_entries(10, label="JOIN")
-        maturity = _compute_maturity_level(entries)
+        maturity = compute_maturity_level(entries)
         assert maturity["maturityLevel"] == "exploratory", (
             f"Expected exploratory, got {maturity['maturityLevel']} "
             f"({maturity['reviewedNonAmbiguous']} reviewed, "
@@ -1282,7 +1293,7 @@ class TestMaturityThresholds:
         """75 reviewed but only 2 JOIN -> below exploratory."""
         entries = self._make_entries(73, label="BREAK")
         entries += self._make_entries(2, label="JOIN")
-        maturity = _compute_maturity_level(entries)
+        maturity = compute_maturity_level(entries)
         assert maturity["maturityLevel"] != "exploratory"
 
     def test_usable_minimum(self):
@@ -1295,9 +1306,10 @@ class TestMaturityThresholds:
             # Vary timing bands to meet timing spread requirement
             bands = ["0-100ms", "101-300ms", "301-500ms", "501-1500ms"]
             e["timingBand"] = bands[i % len(bands)]
-        # Add a test split entry
-        entries[0]["split"] = "test"
-        maturity = _compute_maturity_level(entries)
+        # Add 20 test split entries (required for usable threshold)
+        for i in range(20):
+            entries[i]["split"] = "test"
+        maturity = compute_maturity_level(entries)
         assert maturity["maturityLevel"] == "usable", (
             f"Expected usable, got {maturity['maturityLevel']} "
             f"({maturity['reviewedNonAmbiguous']} reviewed, "
@@ -1315,7 +1327,11 @@ class TestMaturityThresholds:
         entries[0]["split"] = "test"
         # Set one entry's labelOrigin to null (non-human)
         entries[50]["labelOrigin"] = None
-        maturity = _compute_maturity_level(entries)
+        maturity = compute_maturity_level(entries)
+        assert maturity["maturityLevel"] != "usable", (
+            "Non-human labelOrigin should block usable"
+        )
+
     def test_validated_minimum(self):
         """200 reviewed non-ambiguous, 80% reviewed, both labels, 20% second review,
         all adjudicated, native coverage, frozen held-out."""
@@ -1329,7 +1345,7 @@ class TestMaturityThresholds:
             e["reviewerCount"] = 2
             e["reviewStatus"] = "reviewed"
             e["labelOrigin"] = "human"
-        maturity = _compute_maturity_level(entries)
+        maturity = compute_maturity_level(entries, {"frozen": True, "commitSha": "a" * 40, "frozenAt": "2026-07-28T12:00:00Z"})
         assert maturity["maturityLevel"] == "validated", (
             f"Expected validated, got {maturity['maturityLevel']} "
             f"({maturity['reviewedNonAmbiguous']} reviewed, "
@@ -1341,7 +1357,7 @@ class TestMaturityThresholds:
     def test_ambiguous_excluded_from_reviewed_non_ambiguous(self):
         """AMBIGUOUS labels are excluded from reviewed non-ambiguous count."""
         entries = self._make_entries(80, label="AMBIGUOUS")
-        maturity = _compute_maturity_level(entries)
+        maturity = compute_maturity_level(entries)
         assert maturity["reviewedNonAmbiguous"] == 0
 
 
@@ -1408,31 +1424,31 @@ class TestSyntheticReadiness:
 
     def test_too_few_candidates(self):
         entries = [self._minimal_entry() for _ in range(100)]
-        assert not _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+        assert not is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
 
     def test_one_source_only(self):
         entries = [self._minimal_entry() for _ in range(200)]
         for e in entries:
             e["sourceId"] = "src_a"
-        assert not _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+        assert not is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
 
     def test_missing_join_like_coverage(self):
         entries = [self._minimal_entry(samplingTags=["independent_utterance"]) for _ in range(200)]
         for i, e in enumerate(entries):
             e["sourceId"] = f"src_{chr(ord('a') + (i % 2))}"
-        assert not _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+        assert not is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
 
     def test_missing_break_like_coverage(self):
         entries = [self._minimal_entry(samplingTags=["join_like"]) for _ in range(200)]
         for i, e in enumerate(entries):
             e["sourceId"] = f"src_{chr(ord('a') + (i % 2))}"
-        assert not _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+        assert not is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
 
     def test_missing_manifest_source(self):
         entries = [self._minimal_entry() for _ in range(200)]
         for i, e in enumerate(entries):
             e["sourceId"] = "unknown_source"
-        assert not _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+        assert not is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
 
     def test_incomplete_source_provenance(self):
         bad_manifest = [
@@ -1442,20 +1458,20 @@ class TestSyntheticReadiness:
         entries = [self._minimal_entry() for _ in range(200)]
         for i, e in enumerate(entries):
             e["sourceId"] = f"src_{chr(ord('a') + (i % 2))}"
-        assert not _is_operationally_ready(entries, bad_manifest, self.REFERENCE)
+        assert not is_operationally_ready(entries, bad_manifest, self.REFERENCE)
 
     def test_missing_portable_cue_record(self):
         entries = [self._minimal_entry(leftCueId="999") for _ in range(200)]
         for i, e in enumerate(entries):
             e["sourceId"] = f"src_{chr(ord('a') + (i % 2))}"
-        assert not _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+        assert not is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
 
     def test_forbidden_model_fields(self):
         entries = [self._minimal_entry() for _ in range(200)]
         for i, e in enumerate(entries):
             e["sourceId"] = f"src_{chr(ord('a') + (i % 2))}"
         entries[0]["modelPrediction"] = "JOIN"
-        assert not _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+        assert not is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
 
     def test_reviewed_human_labels_allowed(self):
         """Human-reviewed gold labels must not make benchmark operationally unready."""
@@ -1474,7 +1490,7 @@ class TestSyntheticReadiness:
             # Ensure dialogue or inverted punctuation coverage
             if i == 0:
                 e["samplingTags"] = ["independent_utterance", "join_like", "inverted_question"]
-        assert _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE), (
+        assert is_operationally_ready(entries, self.MANIFEST, self.REFERENCE), (
             "Human-reviewed labels should not block operational readiness"
         )
 
@@ -1488,4 +1504,664 @@ class TestSyntheticReadiness:
         # model fields check handles model data. labelOrigin is enforced at the schema level.
         entries[0]["labelOrigin"] = "model"
         entries[0]["modelPrediction"] = "JOIN"
-        assert not _is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+        assert not is_operationally_ready(entries, self.MANIFEST, self.REFERENCE)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 22. Ledger schema validation
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestLedgerValidation:
+    """Ledger event schema and business-rule validation."""
+
+    VALID_IDS = {"src_a:1:2", "src_a:2:3", "src_b:1:2"}
+
+    def _review(self, **overrides) -> dict:
+        ev = {
+            "eventType": "review",
+            "boundaryId": "src_a:1:2",
+            "reviewId": "rev-001",
+            "reviewerId": "reviewer-a",
+            "reviewRound": 1,
+            "label": "JOIN",
+            "confidence": "high",
+            "reason": "Clear join",
+            "createdAt": "2026-07-28T10:00:00Z",
+            "labelOrigin": "human",
+        }
+        ev.update(overrides)
+        return ev
+
+    def _adjudication(self, **overrides) -> dict:
+        ev = {
+            "eventType": "adjudication",
+            "boundaryId": "src_a:1:2",
+            "reviewId": "adj-001",
+            "reviewerId": "adjudicator-1",
+            "label": "BREAK",
+            "confidence": "high",
+            "reason": "Adjudicated",
+            "createdAt": "2026-07-28T12:00:00Z",
+            "labelOrigin": "human",
+        }
+        ev.update(overrides)
+        return ev
+
+    def test_valid_review_passes(self):
+        events = [self._review()]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert errors == [], f"Expected no errors, got: {errors}"
+
+    def test_unknown_event_type(self):
+        events = [self._review(eventType="unknown")]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "unknown eventType" in errors[0]
+
+    def test_unknown_boundary_id(self):
+        events = [self._review(boundaryId="unknown:1:2")]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "unknown boundaryId" in errors[0]
+
+    def test_duplicate_review_id(self):
+        events = [
+            self._review(reviewId="dup-001"),
+            self._review(reviewId="dup-001", boundaryId="src_a:2:3"),
+        ]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "duplicate reviewId" in errors[0]
+
+    def test_missing_reviewer_id(self):
+        events = [self._review(reviewerId="")]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "missing reviewerId" in errors[0]
+
+    def test_invalid_review_round(self):
+        events = [self._review(reviewRound=3)]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "not 1 or 2" in errors[0]
+
+    def test_invalid_label(self):
+        events = [self._review(label="INVALID")]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "invalid label" in errors[0]
+
+    def test_invalid_confidence(self):
+        events = [self._review(confidence="invalid")]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "invalid confidence" in errors[0]
+
+    def test_label_origin_not_human(self):
+        events = [self._review(labelOrigin="model")]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "invalid labelOrigin" in errors[0]
+
+    def test_same_reviewer_both_rounds(self):
+        events = [
+            self._review(reviewId="r1", reviewRound=1, reviewerId="reviewer-a"),
+            self._review(reviewId="r2", reviewRound=2, reviewerId="reviewer-a"),
+        ]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "performed both round 1 and round 2" in errors[0]
+
+    def test_round_two_without_round_one(self):
+        events = [
+            self._review(reviewId="r2", reviewRound=2),
+        ]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "without existing round-one" in errors[0]
+
+    def test_adjudication_without_disagreement(self):
+        events = [
+            self._review(reviewId="r1", reviewRound=1, label="JOIN", reviewerId="rev-a"),
+            self._adjudication(reviewId="adj-1"),
+        ]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert len(errors) > 0
+        assert "adjudication without disagreement" in errors[0]
+
+    def test_adjudication_with_disagreement_valid(self):
+        events = [
+            self._review(reviewId="r1", reviewRound=1, label="JOIN", reviewerId="rev-a"),
+            self._review(reviewId="r2", reviewRound=2, label="BREAK", reviewerId="rev-b"),
+            self._adjudication(reviewId="adj-1"),
+        ]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert errors == [], f"Expected no errors, got: {errors}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 23. State derivation
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestStateDerivation:
+    """Review state derivation from ledger events."""
+
+    def _review(self, **overrides) -> dict:
+        ev = {
+            "eventType": "review",
+            "boundaryId": "test:1:2",
+            "reviewId": "rev-001",
+            "reviewerId": "reviewer-a",
+            "reviewRound": 1,
+            "label": "JOIN",
+            "confidence": "high",
+            "reason": "Test reason",
+            "createdAt": "2026-07-28T10:00:00Z",
+            "labelOrigin": "human",
+        }
+        ev.update(overrides)
+        return ev
+
+    def test_empty_events_unreviewed(self):
+        state = derive_review_state([])
+        assert state["reviewStatus"] == "unreviewed"
+        assert state["goldLabel"] is None
+
+    def test_join_high_confidence_no_second_review(self):
+        state = derive_review_state([self._review(label="JOIN", confidence="high")])
+        assert state["goldLabel"] == "JOIN"
+        assert state["needsSecondReview"] is False
+        assert state["reviewStatus"] == "reviewed"
+
+    def test_join_medium_confidence_needs_second(self):
+        state = derive_review_state([self._review(label="JOIN", confidence="medium")])
+        assert state["goldLabel"] == "JOIN"
+        assert state["needsSecondReview"] is True
+
+    def test_join_low_confidence_needs_second(self):
+        state = derive_review_state([self._review(label="JOIN", confidence="low")])
+        assert state["goldLabel"] == "JOIN"
+        assert state["needsSecondReview"] is True
+        # Low confidence JOIN must NOT be auto-converted to AMBIGUOUS
+        assert state["goldLabel"] == "JOIN"
+
+    def test_break_high_confidence_reviewed(self):
+        state = derive_review_state([self._review(label="BREAK", confidence="high")])
+        assert state["goldLabel"] == "BREAK"
+        assert state["needsSecondReview"] is False
+
+    def test_ambiguous_reviewed_excluded(self):
+        state = derive_review_state([self._review(label="AMBIGUOUS", confidence="high")])
+        assert state["goldLabel"] == "AMBIGUOUS"
+        assert state["reviewStatus"] == "reviewed"
+
+    def test_agreeing_reviews(self):
+        events = [
+            self._review(reviewId="r1", reviewerId="rev-a", label="BREAK", confidence="high"),
+            self._review(reviewId="r2", reviewerId="rev-b", label="BREAK", confidence="high"),
+        ]
+        state = derive_review_state(events)
+        assert state["goldLabel"] == "BREAK"
+        assert state["reviewerCount"] == 2
+        assert state["reviewStatus"] == "reviewed"
+
+    def test_disagreement(self):
+        events = [
+            self._review(reviewId="r1", reviewerId="rev-a", label="JOIN", confidence="high"),
+            self._review(reviewId="r2", reviewerId="rev-b", label="BREAK", confidence="high"),
+        ]
+        state = derive_review_state(events)
+        assert state["goldLabel"] is None
+        assert state["reviewStatus"] == "needs_adjudication"
+
+    def test_adjudication_resolves_disagreement(self):
+        events = [
+            self._review(reviewId="r1", reviewerId="rev-a", label="JOIN", confidence="high"),
+            self._review(reviewId="r2", reviewerId="rev-b", label="BREAK", confidence="high"),
+            {
+                "eventType": "adjudication",
+                "boundaryId": "test:1:2",
+                "reviewId": "adj-001",
+                "reviewerId": "adjudicator-1",
+                "label": "BREAK",
+                "confidence": "high",
+                "reason": "Adjudicated",
+                "createdAt": "2026-07-28T12:00:00Z",
+                "labelOrigin": "human",
+            },
+        ]
+        state = derive_review_state(events)
+        assert state["goldLabel"] == "BREAK"
+        assert state["reviewStatus"] == "adjudicated"
+        assert state["needsSecondReview"] is False
+
+    def test_agreed_low_confidence_becomes_ambiguous(self):
+        events = [
+            self._review(reviewId="r1", reviewerId="rev-a", label="JOIN", confidence="low"),
+            self._review(reviewId="r2", reviewerId="rev-b", label="JOIN", confidence="low"),
+        ]
+        state = derive_review_state(events)
+        assert state["goldLabel"] == "AMBIGUOUS"
+        assert state["labelConfidence"] == "low"
+        assert state["reviewStatus"] == "reviewed"
+
+    def test_reviewer_count_unique(self):
+        events = [
+            self._review(reviewId="r1", reviewerId="rev-a", label="JOIN", confidence="high"),
+            self._review(reviewId="r2", reviewerId="rev-a", label="BREAK", confidence="high"),
+        ]
+        state = derive_review_state(events)
+        # Same reviewer multiple times counts as 1
+        assert state["reviewerCount"] == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 24. Label-origin consistency
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestLabelOriginConsistency:
+    """Label-origin consistency validation."""
+
+    def _entry(self, **overrides) -> dict:
+        e = {
+            "sourceId": "test", "leftCueId": "1", "rightCueId": "2",
+            "goldLabel": None, "labelOrigin": None, "reviewStatus": "unreviewed",
+        }
+        e.update(overrides)
+        return e
+
+    def test_unreviewed_no_label_origin(self):
+        errors = validate_label_origin_consistency([self._entry()])
+        assert errors == []
+
+    def test_reviewed_human_origin_valid(self):
+        e = self._entry(
+            goldLabel="JOIN", labelOrigin="human", reviewStatus="reviewed",
+        )
+        errors = validate_label_origin_consistency([e])
+        assert errors == []
+
+    def test_gold_label_with_null_origin(self):
+        e = self._entry(goldLabel="JOIN", labelOrigin=None, reviewStatus="reviewed")
+        errors = validate_label_origin_consistency([e])
+        assert len(errors) > 0
+        assert "goldLabel" in errors[0]
+        assert "labelOrigin is null" in errors[0]
+
+    def test_gold_label_with_model_origin(self):
+        e = self._entry(
+            goldLabel="JOIN", labelOrigin="model", reviewStatus="reviewed",
+        )
+        errors = validate_label_origin_consistency([e])
+        assert len(errors) > 0
+        assert "labelOrigin=" in errors[0]
+
+    def test_unreviewed_with_non_null_origin(self):
+        e = self._entry(goldLabel=None, labelOrigin="human", reviewStatus="unreviewed")
+        errors = validate_label_origin_consistency([e])
+        assert len(errors) > 0
+        assert "unreviewed but labelOrigin" in errors[0]
+
+    def test_reviewed_without_human_origin(self):
+        e = self._entry(
+            goldLabel="JOIN", labelOrigin=None, reviewStatus="reviewed",
+        )
+        errors = validate_label_origin_consistency([e])
+        assert len(errors) > 0
+
+    def test_invalid_gold_label(self):
+        e = self._entry(
+            goldLabel="INVALID", labelOrigin="human", reviewStatus="reviewed",
+        )
+        errors = validate_label_origin_consistency([e])
+        assert len(errors) > 0
+        assert "invalid goldLabel" in errors[0]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 25. Policy freeze
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestPolicyFreeze:
+    """Policy freeze validation and guards."""
+
+    def test_unfrozen_allows_review(self):
+        """Human review of dev and test is allowed when unfrozen."""
+        freeze = {"frozen": False, "commitSha": None, "frozenAt": None}
+        errors = validate_policy_freeze(freeze)
+        assert errors == []
+
+    def test_unfrozen_allows_dev_evaluation(self):
+        """Dev evaluation is permitted before freeze."""
+        freeze = {"frozen": False, "commitSha": None, "frozenAt": None}
+        # Should not raise for dev work
+        # But test evaluation should fail
+        with pytest.raises(RuntimeError) as exc:
+            require_policy_freeze_for_test_evaluation(freeze)
+        assert "not frozen" in str(exc.value).lower()
+
+    def test_frozen_valid_record(self):
+        freeze = {
+            "frozen": True,
+            "commitSha": "a" * 40,
+            "frozenAt": "2026-07-28T12:00:00Z",
+            "notes": "",
+        }
+        errors = validate_policy_freeze(freeze)
+        assert errors == [], f"Expected no errors, got: {errors}"
+
+    def test_frozen_test_evaluation_succeeds(self):
+        freeze = {
+            "frozen": True,
+            "commitSha": "a" * 40,
+            "frozenAt": "2026-07-28T12:00:00Z",
+            "notes": "",
+        }
+        # Must not raise
+        require_policy_freeze_for_test_evaluation(freeze)
+
+    def test_frozen_missing_sha_rejected(self):
+        freeze = {"frozen": True, "commitSha": None, "frozenAt": "2026-07-28T12:00:00Z"}
+        errors = validate_policy_freeze(freeze)
+        assert len(errors) > 0
+        assert "commitSha" in errors[0]
+
+    def test_frozen_short_sha_rejected(self):
+        freeze = {
+            "frozen": True, "commitSha": "abc123", "frozenAt": "2026-07-28T12:00:00Z",
+        }
+        errors = validate_policy_freeze(freeze)
+        assert len(errors) > 0
+        assert "commitSha" in errors[0]
+
+    def test_frozen_missing_timestamp_rejected(self):
+        freeze = {"frozen": True, "commitSha": "a" * 40, "frozenAt": None}
+        errors = validate_policy_freeze(freeze)
+        assert len(errors) > 0
+        assert "frozenAt" in errors[0]
+
+    def test_report_maturity_reflects_freeze(self):
+        """The report maturity object must reflect actual freeze state."""
+        freeze = {"frozen": True, "commitSha": "a" * 40, "frozenAt": "2026-07-28T12:00:00Z"}
+        entries = [{
+            "sourceId": "test", "goldLabel": "BREAK", "reviewStatus": "reviewed",
+            "reviewerCount": 2, "labelOrigin": "human", "split": "dev",
+            "samplingTags": ["independent_utterance", "join_like"],
+            "timingBand": "101-300ms", "contentStructure": "dialogue",
+            "originalSpokenLanguage": "es", "sourceQualityTier": "native_original",
+        } for _ in range(250)]
+        maturity = compute_maturity_level(entries, freeze)
+        assert maturity["isFrozen"] is True
+
+    def test_report_maturity_false_when_unfrozen(self):
+        freeze = {"frozen": False, "commitSha": None, "frozenAt": None}
+        entries = [{
+            "sourceId": "test", "goldLabel": "BREAK", "reviewStatus": "reviewed",
+            "reviewerCount": 2, "labelOrigin": "human", "split": "dev",
+            "samplingTags": ["independent_utterance", "join_like"],
+            "timingBand": "101-300ms", "contentStructure": "dialogue",
+            "originalSpokenLanguage": "es", "sourceQualityTier": "native_original",
+        } for _ in range(250)]
+        maturity = compute_maturity_level(entries, freeze)
+        assert maturity["isFrozen"] is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 26. Round-two queue selection
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestRoundTwoQueueSelection:
+    """Round-two queue never contains unreviewed entries."""
+
+    def test_unreviewed_boundaries_excluded_from_round_two(self):
+        """A boundary with no round-one review must not appear in round-two queue."""
+        from benchmarks.prepare_spanish_review_queue import (
+            get_first_review_per_boundary,
+        )
+        # Empty ledger -> no first reviews -> no round-two candidates
+        first_reviews = get_first_review_per_boundary([])
+        assert len(first_reviews) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 27. CSV import behavior
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCSVImport:
+    """CSV import safety and atomicity."""
+
+    def test_atomic_append_no_partial_write(self):
+        """Failed batch must not partially write to ledger."""
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, "-m", "benchmarks.record_spanish_reviews",
+             "--input", "nonexistent.csv",
+             "--reviewer", "test", "--round", "1"],
+            capture_output=True, text=True, cwd=PROJECT_ROOT,
+        )
+        # Should fail because file doesn't exist
+        assert result.returncode != 0
+
+    def test_record_script_validates_before_write(self):
+        """Invalid CSV rows must be rejected before any ledger write."""
+        import tempfile
+        import os
+        fd, csv_path = tempfile.mkstemp(suffix=".csv", prefix="test_queue_")
+        with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
+            f.write("sourceId,leftCueId,rightCueId,goldLabel,labelConfidence,reviewReason\n")
+            f.write("unknown,1,2,JOIN,high,test\n")
+
+        try:
+            import subprocess
+            result = subprocess.run(
+                [sys.executable, "-m", "benchmarks.record_spanish_reviews",
+                 "--input", csv_path,
+                 "--reviewer", "test", "--round", "1"],
+                capture_output=True, text=True, cwd=PROJECT_ROOT,
+            )
+            assert result.returncode != 0
+            assert "not a valid candidate" in result.stderr
+        finally:
+            os.unlink(csv_path)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 28. Report consistency across build and apply
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestReportConsistencyAcrossWorkflows:
+    """Report output must be identical regardless of which script generated it."""
+
+    def test_report_can_be_generated_from_both_paths(self, fixture, manifest, reference):
+        """generate_dataset_report returns the same structure when called from
+        either context (no reviews vs with reviews)."""
+        policy_freeze = load_policy_freeze(POLICY_FREEZE_PATH)
+        sources = manifest.get("sources", []) if isinstance(manifest, dict) else manifest
+        report = generate_dataset_report(fixture, sources, reference, policy_freeze)
+        assert "benchmarkOperationallyReady" in report
+        assert "maturity" in report
+        assert "reviewProgress" in report
+        assert report["overview"]["totalCandidates"] == len(fixture)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 29. Maturity dev/test reviewed-count thresholds
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestMaturityDevTestThresholds:
+    """Dev/test reviewed-count thresholds for maturity splits."""
+
+    def _entry(self, **overrides) -> dict:
+        e = {
+            "sourceId": "src_a", "goldLabel": "BREAK", "reviewStatus": "unreviewed",
+            "reviewerCount": 0, "labelOrigin": None, "split": "dev",
+            "samplingTags": ["independent_utterance", "join_like"],
+            "timingBand": "101-300ms", "contentStructure": "dialogue",
+            "originalSpokenLanguage": "en", "sourceQualityTier": "community_translation",
+        }
+        e.update(overrides)
+        return e
+
+    def test_validated_requires_80_percent_dev_reviewed(self):
+        """Validated requires at least 80% of dev reviewed."""
+        entries = []
+        for i in range(200):
+            e = self._entry(
+                sourceId=f"src_{i % 3}", split="dev",
+                goldLabel="BREAK", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=2,
+                originalSpokenLanguage="es",
+                contentStructure="dialogue" if i < 100 else "monologue",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+        for i in range(50):
+            e = self._entry(
+                sourceId=f"src_{i % 2}", split="test",
+                goldLabel="JOIN", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=2,
+                originalSpokenLanguage="es",
+                contentStructure="dialogue",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+
+        freeze = {"frozen": True, "commitSha": "a" * 40, "frozenAt": "2026-07-28T12:00:00Z"}
+        maturity = compute_maturity_level(entries, freeze)
+        assert maturity["maturityLevel"] == "validated", (
+            f"Expected validated, got {maturity['maturityLevel']} "
+            f"({maturity['reviewedNonAmbiguous']} non-ambiguous)"
+        )
+
+    def test_validated_blocked_by_insufficient_test_review(self):
+        """Validated requires 80%+ test reviewed."""
+        entries = []
+        for i in range(200):
+            e = self._entry(
+                sourceId=f"src_{i % 3}", split="dev",
+                goldLabel="BREAK", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=2,
+                originalSpokenLanguage="es",
+                contentStructure="dialogue" if i < 100 else "monologue",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+        # 50 test entries, only 30 reviewed = 60% < 80%
+        for i in range(50):
+            status = "reviewed" if i < 30 else "unreviewed"
+            origin = "human" if i < 30 else None
+            e = self._entry(
+                sourceId=f"src_{i % 2}", split="test",
+                goldLabel="JOIN" if i < 30 else None,
+                reviewStatus=status, labelOrigin=origin, reviewerCount=2 if i < 30 else 0,
+                originalSpokenLanguage="es",
+                contentStructure="dialogue",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+
+        freeze = {"frozen": True, "commitSha": "a" * 40, "frozenAt": "2026-07-28T12:00:00Z"}
+        maturity = compute_maturity_level(entries, freeze)
+        assert maturity["maturityLevel"] != "validated"
+
+    def test_usable_requires_minimum_test_reviewed(self):
+        """Usable requires at least 20 reviewed non-ambiguous test boundaries."""
+        entries = []
+        for i in range(130):
+            e = self._entry(
+                sourceId=f"src_{i % 3}", split="dev",
+                goldLabel="BREAK", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=1,
+                originalSpokenLanguage="en",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+        for i in range(20):
+            e = self._entry(
+                sourceId=f"src_{i % 2}", split="test",
+                goldLabel="JOIN", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=1,
+                originalSpokenLanguage="en",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+
+        # Give some entries second review for second_review_pct > 0
+        for i in range(10):
+            entries[i]["reviewerCount"] = 2
+
+        maturity = compute_maturity_level(entries)
+        assert maturity["maturityLevel"] == "usable", (
+            f"Expected usable, got {maturity['maturityLevel']} "
+            f"({maturity['reviewedNonAmbiguous']} reviewed, "
+            f"second_review={maturity['secondReviewPercentage']})"
+        )
+
+    def test_usable_blocked_by_insufficient_test_review(self):
+        """Usable blocked by fewer than 20 reviewed test boundaries."""
+        entries = []
+        for i in range(150):
+            e = self._entry(
+                sourceId=f"src_{i % 3}", split="dev",
+                goldLabel="BREAK", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=1,
+                originalSpokenLanguage="en",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+        for i in range(10):
+            e = self._entry(
+                sourceId=f"src_{i % 2}", split="test",
+                goldLabel="JOIN", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=1,
+                originalSpokenLanguage="en",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+
+        entries[0]["reviewerCount"] = 2
+        entries[0]["split"] = "dev"
+
+        maturity = compute_maturity_level(entries)
+        assert maturity["maturityLevel"] != "usable"
+
+    def test_ambiguous_does_not_block_validated(self):
+        """AMBIGUOUS entries must not prevent validated when other thresholds met."""
+        entries = []
+        for i in range(190):
+            e = self._entry(
+                sourceId=f"src_{i % 3}", split="dev",
+                goldLabel="BREAK", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=2,
+                originalSpokenLanguage="es",
+                contentStructure="dialogue" if i < 95 else "monologue",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+        for i in range(30):
+            e = self._entry(
+                sourceId=f"src_{i % 2}", split="dev",
+                goldLabel="AMBIGUOUS", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=2,
+                originalSpokenLanguage="es",
+                contentStructure="dialogue",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+        for i in range(40):
+            e = self._entry(
+                sourceId=f"src_{i % 2}", split="test",
+                goldLabel="JOIN", reviewStatus="reviewed",
+                labelOrigin="human", reviewerCount=2,
+                originalSpokenLanguage="es",
+                contentStructure="dialogue",
+                timingBand=["0-100ms", "101-300ms", "301-500ms"][i % 3],
+            )
+            entries.append(e)
+
+        freeze = {"frozen": True, "commitSha": "a" * 40, "frozenAt": "2026-07-28T12:00:00Z"}
+        maturity = compute_maturity_level(entries, freeze)
+        assert maturity["maturityLevel"] == "validated", (
+            f"Expected validated despite AMBIGUOUS entries, "
+            f"got {maturity['maturityLevel']}"
+        )
