@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, Sequence
 
-from fastapi import Depends, FastAPI, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .language_profile import resolve_profile
 from .model import (
     DEFAULT_THRESHOLD,
     WORD_PATTERN,
@@ -13,12 +14,13 @@ from .model import (
     ModelUnavailableError,
     find_word_occurrences,
 )
-
 from .sat import SaTSentenceReconstructor, SaTUnavailableError
 from .subtitles import (
-    _detect_cue_speakers,
+    BoundaryPolicyConfig,
     SubtitleSegment,
     SubtitleSentenceReconstructor,
+    _detect_cue_speakers,
+    parse_srt_file,
 )
 
 
@@ -74,7 +76,7 @@ class SubtitleSegmentRequest(BaseModel):
     raw_text: str | None = Field(default=None, alias="rawText")
     lines: list[str] = Field(default_factory=list)
     speaker_markers: list[str] = Field(default_factory=list, alias="speakerMarkers")
-    contains_multiple_speakers: bool = Field(default=False, alias="containsMultipleSpeakers")
+    contains_multiple_speakers: bool | None = Field(default=None, alias="containsMultipleSpeakers")
 
     @field_validator("text")
     @classmethod
@@ -91,18 +93,28 @@ class SubtitleSegmentRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_structural_fields(self) -> "SubtitleSegmentRequest":
-        """Validate and derive speaker metadata when lines are provided.
+        """Validate and derive speaker metadata.
 
-        When the client provides ``lines``, derive ``speaker``,
-        ``speaker_markers``, and ``contains_multiple_speakers`` server-side
-        so that contradictory client-supplied values are caught early.
+        When the client provides ``lines``, derive speaker metadata server-side
+        from the line structure so that contradictory client-supplied values
+        are caught early.
+
+        When lines are absent, use ``rawText`` (split by newline) if available,
+        otherwise use ``text`` as one best-effort line.  This supports old API
+        clients that send only the four basic fields.
+
+        Treat client-supplied structural metadata as optional hints, not
+        authoritative truth.  Reject clear contradictions.
         """
+        # Build the best available text lines.
         text_lines = list(self.lines) if self.lines else []
+        if not text_lines and self.raw_text is not None:
+            text_lines = self.raw_text.split("\n")
         if not text_lines:
-            return self
+            text_lines = [self.text]
 
-        # Reject contradictory raw_text / lines representations.
-        if self.raw_text is not None:
+        # When real lines were provided, reject contradictory raw_text.
+        if self.lines and self.raw_text is not None:
             expected_raw = "\n".join(text_lines)
             if self.raw_text != expected_raw:
                 raise ValueError(
@@ -110,7 +122,7 @@ class SubtitleSegmentRequest(BaseModel):
                     f"{self.raw_text!r} vs {expected_raw!r}"
                 )
 
-        # Derive speaker metadata server-side from lines.
+        # Derive speaker metadata server-side from text lines.
         derived = _detect_cue_speakers(text_lines, self.text)
         derived_speaker: str | None = derived["speaker"]
         derived_markers: tuple[str, ...] = derived["speaker_markers"]
@@ -123,7 +135,7 @@ class SubtitleSegmentRequest(BaseModel):
                     f"speaker {self.speaker!r} contradicts line-derived "
                     f"speaker {derived_speaker!r}"
                 )
-        # Prefer derived values when the client left them at default.
+        # Prefer derived values when the client left them unset.
         if self.speaker is None and derived_speaker is not None:
             self.speaker = derived_speaker
         if not self.speaker_markers and derived_markers:
@@ -146,7 +158,7 @@ class SubtitleSegmentRequest(BaseModel):
             raw_text=self.raw_text,
             lines=tuple(self.lines),
             speaker_markers=tuple(self.speaker_markers),
-            contains_multiple_speakers=self.contains_multiple_speakers,
+            contains_multiple_speakers=self.contains_multiple_speakers or False,
         )
 
 class ReconstructedSentencePartResponse(BaseModel):
@@ -176,6 +188,14 @@ class SubtitleReconstructionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     segments: list[SubtitleSegmentRequest] = Field(..., min_length=1)
+    language: str | None = Field(default=None, description="Optional BCP-47 language tag (default: 'en')")
+
+
+class ReconstructionDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolved_language: str = Field(default="en", alias="resolvedLanguage")
+    profile: str = Field(default="EnglishBoundaryProfile", alias="profile")
 
 
 class SubtitleReconstructionResponse(BaseModel):
@@ -183,6 +203,7 @@ class SubtitleReconstructionResponse(BaseModel):
 
     segments: list[SubtitleSegmentRequest]
     sentences: list[ReconstructedSentenceResponse]
+    diagnostics: ReconstructionDiagnostics | None = Field(default=None)
 
 
 class SimilarityRequest(BaseModel):
@@ -369,12 +390,19 @@ def sentence_from_segments(
 )
 def reconstruct_subtitles(
     request: SubtitleReconstructionRequest,
-    service: SubtitleSentenceReconstructor = Depends(get_subtitle_service),
+    service: SaTSentenceReconstructor = Depends(get_sat_service),
 ) -> SubtitleReconstructionResponse:
     """Reconstruct sentence context while retaining every original cue."""
+    from app.subtitles import SubtitleSentenceReconstructor as SSR
+    language_profile = resolve_profile(request.language)
+    reconstructor = SSR(service, language_profile=language_profile)
     segments = [segment.to_domain() for segment in request.segments]
-    sentences = service.reconstruct(segments)
+    sentences = reconstructor.reconstruct(segments)
     return SubtitleReconstructionResponse(
         segments=request.segments,
         sentences=[ReconstructedSentenceResponse(**sentence.to_dict()) for sentence in sentences],
+        diagnostics=ReconstructionDiagnostics(
+            resolvedLanguage=language_profile.code,
+            profile=type(language_profile).__name__,
+        ),
     )

@@ -6,9 +6,9 @@
   "comparison": {
     "originalCueCount": 651,
     "boundaryCount": 650,
-    "boundariesJoined": 67,
-    "boundariesBroken": 583,
-    "sentencesCreated": 584,
+    "boundariesJoined": 68,
+    "boundariesBroken": 582,
+    "sentencesCreated": 583,
     "sourceCueIdsPreservedInOrder": true,
     "missingCueIds": [],
     "duplicateCueIds": [],
@@ -759,6 +759,16 @@
       "satProbability": 3.144662332488224e-05,
       "continuationScore": 4,
       "finalReason": "continuation structure outweighs advisory punctuation, capitalization, and model boundary evidence (score=4)"
+    },
+    {
+      "leftCueId": "462",
+      "rightCueId": "463",
+      "leftText": "They didn't make a sound",
+      "rightText": "when they died.",
+      "gapMs": 40,
+      "satProbability": 8.530320883437525e-06,
+      "continuationScore": 2,
+      "finalReason": "model probability favors continuation"
     },
     {
       "leftCueId": "467",

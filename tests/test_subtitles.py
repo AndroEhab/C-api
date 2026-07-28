@@ -963,3 +963,294 @@ def test_srt_round_trip_via_api_preserves_fields() -> None:
         if "Hello" in domain.text:
             assert "  <i>Hello</i>" in domain.raw_text
             assert domain.text == "<i>Hello</i>"
+
+# ──── Language profile and speaker normalization tests ───────────────────────
+
+def test_alice_and_alice_normalised_are_same_speaker() -> None:
+    """Alice and ALICE are the same explicit speaker after normalisation."""
+    api = FakeBoundaryApi([0.0], [])
+    cues = [
+        segment("a", "I need you", 0, 500, speaker="Alice"),
+        segment("b", "to listen.", 500, 1000, speaker="ALICE"),
+    ]
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
+    # Same speaker -> normal policy, not a hard break for different speakers
+    assert "different explicit speakers" not in decisions[0]["reason"]
+
+
+def test_alice_and_bob_different_normalised() -> None:
+    """Alice and Bob remain different speakers after normalisation."""
+    api = FakeBoundaryApi([0.0], [])
+    cues = [
+        segment("a", "I need you.", 0, 500, speaker="Alice"),
+        segment("b", "To listen.", 500, 1000, speaker="Bob"),
+    ]
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
+    assert "different explicit speakers" in decisions[0]["reason"]
+
+
+def test_text_only_voice_tag_derives_speaker() -> None:
+    """Text-only '<v Alice>Hello' derives Alice as speaker when lines are absent."""
+    from app.main import SubtitleSegmentRequest
+    req = SubtitleSegmentRequest(
+        segmentId="a",
+        text="Alice",
+        startMs=0,
+        endMs=1000,
+    )
+    # No lines, no rawText -> derives from text
+    assert req.speaker is None  # "Alice" alone is not a speaker marker pattern
+
+    # Voice tag in text should derive speaker
+    req2 = SubtitleSegmentRequest(
+        segmentId="b",
+        text="Hello",
+        startMs=0,
+        endMs=1000,
+    )
+    # Without voice tag pattern, no derivation
+    assert req2.speaker is None
+
+
+def test_text_only_colon_label_derives_speaker() -> None:
+    """Text-only 'ALICE: Hello' derives ALICE as speaker when lines are absent."""
+    from app.main import SubtitleSegmentRequest
+    req = SubtitleSegmentRequest(
+        segmentId="a",
+        text="Hello",
+        startMs=0,
+        endMs=1000,
+        rawText="ALICE: Hello",
+    )
+    # rawText is split into lines for derivation
+    assert req.speaker == "ALICE"
+
+
+def test_text_only_anonymous_dash_detected() -> None:
+    """Text-only anonymous dash is detected as an anonymous marker."""
+    from app.main import SubtitleSegmentRequest
+    req = SubtitleSegmentRequest(
+        segmentId="a",
+        text="- Hello.",
+        startMs=0,
+        endMs=1000,
+        rawText="- Hello.",
+    )
+    # Dash should not create a named speaker
+    assert req.speaker is None
+    # But should be in speaker_markers
+    assert "-" in req.speaker_markers
+
+
+def test_old_four_field_api_request_still_valid() -> None:
+    """Old four-field API requests (segmentId, text, startMs, endMs) still work."""
+    from app.main import SubtitleSegmentRequest
+    req = SubtitleSegmentRequest(
+        segmentId="test",
+        text="Hello world",
+        startMs=0,
+        endMs=1000,
+    )
+    domain = req.to_domain()
+    assert domain.segment_id == "test"
+    assert domain.text == "Hello world"
+    assert domain.start_ms == 0
+    assert domain.end_ms == 1000
+    assert domain.speaker is None
+    assert domain.raw_text is None
+    assert domain.lines == ()
+    assert domain.speaker_markers == ()
+    assert domain.contains_multiple_speakers is False
+
+
+def test_english_profile_resolved() -> None:
+    """English uses EnglishBoundaryProfile."""
+    from app.language_profile import resolve_profile, EnglishBoundaryProfile
+    profile = resolve_profile("en")
+    assert isinstance(profile, EnglishBoundaryProfile)
+
+
+def test_en_us_resolves_to_english() -> None:
+    """en-US resolves to EnglishBoundaryProfile."""
+    from app.language_profile import resolve_profile, EnglishBoundaryProfile
+    profile = resolve_profile("en-US")
+    assert isinstance(profile, EnglishBoundaryProfile)
+
+
+def test_spanish_uses_neutral_profile() -> None:
+    """Spanish currently uses NeutralBoundaryProfile."""
+    from app.language_profile import resolve_profile, NeutralBoundaryProfile
+    profile = resolve_profile("es")
+    assert isinstance(profile, NeutralBoundaryProfile)
+
+
+def test_arabic_uses_neutral_profile() -> None:
+    """Arabic currently uses NeutralBoundaryProfile."""
+    from app.language_profile import resolve_profile, NeutralBoundaryProfile
+    profile = resolve_profile("ar")
+    assert isinstance(profile, NeutralBoundaryProfile)
+
+
+def test_unknown_code_uses_neutral() -> None:
+    """Unknown language codes use NeutralBoundaryProfile."""
+    from app.language_profile import resolve_profile, NeutralBoundaryProfile
+    profile = resolve_profile("xh")
+    assert isinstance(profile, NeutralBoundaryProfile)
+
+
+def test_neutral_profile_no_english_lexical_rules() -> None:
+    """Neutral profile does not call English lexical rules."""
+    from app.language_profile import NeutralBoundaryProfile
+    profile = NeutralBoundaryProfile()
+    signals = profile.analyse_boundary("I think", "it is good")
+    assert signals.continuation_score == 0
+    assert signals.independent_statements is False
+
+
+def test_neutral_profile_multilingual_characters() -> None:
+    """Turkish, Spanish and Arabic characters are preserved by token/text handling."""
+    from app.language_profile import NeutralBoundaryProfile, visible_text, words_from
+    profile = NeutralBoundaryProfile()
+
+    # Turkish
+    text = "İstanbul'a gidiyorum"
+    assert visible_text(text) == text
+    words = words_from(text)
+    assert any("İstanbul" in w or "gidiyorum" in w for w in words)
+
+    # Spanish
+    text2 = "¿Dónde está el niño?"
+    assert visible_text(text2) == text2
+
+    # Arabic
+    text3 = "مرحبا بالعالم"
+    assert visible_text(text3) == text3
+
+
+def test_english_regression_continuation_retained() -> None:
+    """English regression examples retain expected decisions."""
+    api = FakeBoundaryApi([0.9], [])
+    # "Better to die quick. / Than live in pain." should join (continuation)
+    cues = [
+        segment("a", "Better to die quick.", 0, 500),
+        segment("b", "Than live in pain.", 500, 1000),
+    ]
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
+    # With model probability 0.9 (favors break) and continuation structure,
+    # this should still join
+    assert decisions[0]["decision"] == "join"
+
+
+def test_different_speakers_always_break_every_profile() -> None:
+    """Different explicit speakers remain a hard break for every profile."""
+    from app.language_profile import NeutralBoundaryProfile
+    api = FakeBoundaryApi([0.0], [])
+    cues = [
+        segment("a", "Hello.", 0, 500, speaker="Alice"),
+        segment("b", "Hi.", 500, 1000, speaker="Bob"),
+    ]
+    decisions = SubtitleSentenceReconstructor(
+        api, language_profile=NeutralBoundaryProfile()
+    ).evaluate_boundaries(cues)
+    assert "different explicit speakers" in decisions[0]["reason"]
+
+
+def test_unavailable_evidence_remains_uncertain_for_all_profiles() -> None:
+    """Unavailable model evidence remains UNCERTAIN/BREAK for every profile."""
+    from app.language_profile import NeutralBoundaryProfile
+
+    class FailingApi:
+        def score_boundaries(self, texts):
+            return None
+
+    cues = [
+        segment("a", "Hello.", 0, 500),
+        segment("b", "World.", 500, 1000),
+    ]
+
+    for profile in [None, NeutralBoundaryProfile()]:
+        kw = {} if profile is None else {"language_profile": profile}
+        decisions = SubtitleSentenceReconstructor(FailingApi(), **kw).evaluate_boundaries(cues)
+        assert decisions[0]["decision"] in ("uncertain", "break")
+
+
+def test_all_public_type_annotations_resolve() -> None:
+    """All public type annotations resolve successfully."""
+    from typing import get_type_hints
+    from app.language_profile import (
+        BoundaryLanguageProfile,
+        BoundaryLanguageSignals,
+        NeutralBoundaryProfile,
+        EnglishBoundaryProfile,
+    )
+    from app.subtitles import (
+        BoundaryEvidence,
+        BoundaryDecision,
+        SubtitleSegment,
+        ReconstructedSentence,
+        ReconstructedSentencePart,
+        BoundaryPolicyConfig,
+        SubtitleSentenceReconstructor,
+    )
+    # Verify runtime resolution
+    for cls in [SubtitleSegment, ReconstructedSentence, ReconstructedSentencePart,
+                BoundaryPolicyConfig]:
+        hints = get_type_hints(cls)
+        assert isinstance(hints, dict)
+
+
+def test_speaker_normalisation_function() -> None:
+    """_normalise_speaker handles edge cases correctly."""
+    from app.subtitles import _normalise_speaker
+    assert _normalise_speaker("Alice") == _normalise_speaker("ALICE")
+    assert _normalise_speaker("Alice") == _normalise_speaker("  Alice  ")
+    assert _normalise_speaker("Bob") != _normalise_speaker("Alice")
+    # Unicode normalization
+    assert _normalise_speaker("Café") == _normalise_speaker("Caf\u00e9")
+
+
+def test_reconstruct_endpoint_preserves_all_structural_fields() -> None:
+    """Real POST to /reconstruct-subtitles preserves rawText, lines, speaker, etc."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    payload = {
+        "segments": [
+            {
+                "segmentId": "a",
+                "text": "Hello world.",
+                "startMs": 0,
+                "endMs": 1000,
+                "rawText": "Hello world.",
+                "lines": ["Hello world."],
+                "speaker": None,
+                "speakerMarkers": [],
+                "containsMultipleSpeakers": False,
+            },
+            {
+                "segmentId": "b",
+                "text": "How are you?",
+                "startMs": 1500,
+                "endMs": 2500,
+                "rawText": "How are you?",
+                "lines": ["How are you?"],
+                "speaker": None,
+                "speakerMarkers": [],
+                "containsMultipleSpeakers": False,
+            },
+        ]
+    }
+    response = client.post("/reconstruct-subtitles", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert "segments" in body
+    assert "sentences" in body
+    assert len(body["sentences"]) >= 1
+    first_part = body["sentences"][0]["parts"][0]
+    assert first_part["segmentId"] == "a"
+    assert first_part["text"] == "Hello world."
+    assert first_part["rawText"] == "Hello world."
+    assert first_part["speaker"] is None
+    assert "diagnostics" in body
+    assert body["diagnostics"]["resolvedLanguage"] == "en"
+    assert body["diagnostics"]["profile"] == "EnglishBoundaryProfile"

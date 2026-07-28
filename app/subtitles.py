@@ -5,9 +5,27 @@ import logging
 import math
 from pathlib import Path
 import re
+import unicodedata
 from typing import Any, Literal, Mapping, Protocol, Sequence, TypedDict
 
+from .language_profile import (
+    BoundaryLanguageProfile,
+    BoundaryLanguageSignals,
+    EnglishBoundaryProfile,
+    resolve_profile,
+    normalise_speaker,
+)
 from .sat import SaTSentenceReconstructor, join_segments, text_join_issue
+
+
+def _normalise_speaker(name: str) -> str:
+    '''Return a comparison-safe normalised form of a speaker identity.
+
+    * strips surrounding whitespace
+    * applies Unicode casefold
+    * normalises to NFC
+    '''
+    return unicodedata.normalize('NFC', name.strip().casefold())
 
 
 _TIMESTAMP_RE = re.compile(
@@ -82,20 +100,6 @@ _STRONG_SENTENCE_END_RE = re.compile(r"""[.!?…]+(?:["'’”»)\]}]+)?$""")
 _DIALOGUE_DASH_RE = re.compile(r"^\s*(?:--?|[–—]|>>)\s+")
 _WORD_RE = re.compile(r"[A-Za-z]+(?:['''][A-Za-z]+)?")
 _CUE_ID_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<number>\d+)$")
-_SUBORDINATE_STARTS = frozenset(
-    {"although", "because", "if", "since", "though", "unless", "when", "while"}
-)
-_CONTINUATION_STARTS = frozenset(
-    {"and", "as", "because", "but", "for", "if", "nor", "or", "so", "that", "while"}
-)
-_CONTINUATION_PRONOUNS = frozenset(
-    {"her", "his", "its", "my", "our", "their", "the", "this", "that", "your"}
-)
-_WH_STARTS = frozenset({"how", "what", "when", "where", "which", "who", "whom", "whose", "why"})
-_FINITE_VERB_RE = re.compile(
-    r"\b(?:[A-Za-z]{2,}(?:s|es|ed|ing|en)?)\b(?:\s+(?:the|a|an|my|your|his|her|its|our|their|this|that|these|those)\s+[A-Za-z]+)?\s+(?:is|are|was|were|has|have|had|will|would|can|could|shall|should|may|might|do|does|did)\b|\b[A-Za-z]+(?:s|es|ed|ing|en)?\b",
-    re.IGNORECASE,
-)
 _VOICE_TAG_RE = re.compile(
     r"^\s*(?:<v(?:\s+[^>]*)?>|\[[A-Z][A-Z0-9 ._-]{1,30}\]\s*|"
     r"[A-Z][A-Z0-9 ._-]{1,30}:)"
@@ -104,54 +108,6 @@ _FORMATTING_TAG_RE = re.compile(r"</?[^>]+>|\{\\[^}]+\}")
 _VOICE_TAG_EXTRACT_RE = re.compile(r"^\s*<v\s+(\S[^>]*)>")
 _BRACKET_SPEAKER_RE = re.compile(r"^\s*\[([A-Z][A-Z0-9 ._-]{1,30})\]\s*")
 _LABEL_SPEAKER_RE = re.compile(r"^\s*([A-Z][A-Z0-9 ._-]{1,30}):(?:\s|$)")
-_INCOMPLETE_ENDINGS = frozenset(
-    {"a", "an", "and", "as", "at", "because", "but", "for", "if", "of", "or", "than", "to", "with"}
-)
-_COMPLEMENT_CONTINUATION_RE = re.compile(
-    r"\b(?:i['’]?ll|i\s+will|i\s+can)\s+"
-    r"(?:tell|show|explain)\s+(?:you|him|her|them)\b",
-    re.IGNORECASE,
-)
-_COMPARATIVE_CONTINUATION_RE = re.compile(r"^\s*better\s+to\b", re.IGNORECASE)
-_QUESTION_STARTS = frozenset(
-    {
-        "am",
-        "are",
-        "can",
-        "could",
-        "did",
-        "do",
-        "does",
-        "had",
-        "has",
-        "have",
-        "how",
-        "is",
-        "may",
-        "must",
-        "should",
-        "was",
-        "were",
-        "what",
-        "when",
-        "where",
-        "which",
-        "who",
-        "whom",
-        "whose",
-        "why",
-        "will",
-        "would",
-    }
-)
-_FINITE_VERB_RE = re.compile(
-    r"\b(?:am|are|can|could|did|do|does|had|has|have|is|may|might|must|"
-    r"shall|should|was|were|will|would|won't|can't|don't|doesn't|didn't|"
-    r"i'm|you're|he's|she's|it's|we're|they're|i'll|you'll|we'll|they'll|"
-    r"think|thinks|thought|suspect|suspects|tell|tells|told|want|wants|"
-    r"need|needs|know|knows|knew|escaped|issue|live|die)\b",
-    re.IGNORECASE,
-)
 
 def _visible_text(text: str) -> str:
     return _FORMATTING_TAG_RE.sub("", text).strip()
@@ -201,13 +157,15 @@ def _detect_cue_speakers(
       - contains_multiple_speakers: bool
     """
     markers: list[str] = []
-    named_speakers: set[str] = set()
+    named_speakers: dict[str, str] = {}  # normalised -> original
     dash_count = 0
 
     for line in text_lines:
         named = _extract_speaker_from_line(line)
         if named is not None:
-            named_speakers.add(named)
+            normed = _normalise_speaker(named)
+            if normed not in named_speakers:
+                named_speakers[normed] = named
             markers.append(named)
         elif _DIALOGUE_DASH_RE.match(line):
             dash_count += 1
@@ -216,7 +174,7 @@ def _detect_cue_speakers(
 
     speaker: str | None = None
     if len(named_speakers) == 1:
-        speaker = next(iter(named_speakers))
+        speaker = next(iter(named_speakers.values()))
 
     multiple_speakers = len(named_speakers) > 1 or dash_count > 1 or (
         dash_count > 0 and len(named_speakers) > 0
@@ -229,97 +187,30 @@ def _detect_cue_speakers(
     }
 
 
+
 def _starts_new_sentence(text: str) -> bool:
-    # Only explicit speaker labels (voice tags, bracket names, colon labels)
-    # are treated as new-sentence starts — anonymous dialogue dashes are not.
-    if _VOICE_TAG_RE.match(text):
-        return True
-    first_letter = re.search(r"[A-Za-z]", _visible_text(text))
-    return first_letter is not None and first_letter.group(0).isupper()
+    '''Backward-compatible wrapper using English capitalisation rules.'''
+    return EnglishBoundaryProfile()._starts_new_sentence(text)
 
 
 def _looks_like_question(text: str) -> bool:
-    visible = _visible_text(text)
-    if visible.rstrip(""" "'’”»)]}""").endswith("?"):
-        return True
-    words = _words(visible)
-    if not words:
-        return False
-    first = words[0].lower()
-    return first in _QUESTION_STARTS or (first == "any" and len(words) > 1)
+    '''Backward-compatible wrapper using English question detection.'''
+    return EnglishBoundaryProfile()._looks_like_question(text)
 
 
 def _likely_complete_clause(text: str) -> bool:
-    visible = _visible_text(text)
-    if _ends_strong_sentence(visible) or _looks_like_question(visible):
-        return True
-    words = _words(visible)
-    return len(words) >= 2 and _FINITE_VERB_RE.search(visible) is not None
+    '''Backward-compatible wrapper using English clause-completeness logic.'''
+    return EnglishBoundaryProfile()._likely_complete_clause(text)
 
 
 def _appears_incomplete(text: str) -> bool:
-    """Return weak evidence that a cue is a fragment of a larger clause."""
-    visible = _visible_text(text)
-    words = _words(visible)
-    if not words or _ends_strong_sentence(visible) or _looks_like_question(visible):
-        return False
-    first = words[0].casefold()
-    last = words[-1].casefold()
-    return (
-        len(words) == 1
-        or last in _INCOMPLETE_ENDINGS
-        or first in _SUBORDINATE_STARTS
-        or re.search(r"[a-z]$", visible) is not None
-    )
+    '''Backward-compatible wrapper using English incomplete-ending logic.'''
+    return EnglishBoundaryProfile()._appears_incomplete(text)
 
 
 def _continuation_structure_score(left: str, right: str) -> int:
-    """Score multi-signal continuation patterns without keyword-only joins."""
-    left_visible = _visible_text(left)
-    right_visible = _visible_text(right)
-    left_words = _words(left_visible)
-    right_words = _words(right_visible)
-    if not left_words or not right_words:
-        return 0
-
-    first_right = right_words[0].casefold()
-    first_left = left_words[0].casefold()
-    score = 0
-    first_letter = re.search(r"[A-Za-z]", right_visible)
-    if first_letter is not None and first_letter.group(0).islower() and len(right_words) >= 2:
-        score += 2
-
-    if (
-        first_right == "than"
-        and len(right_words) >= 3
-        and _COMPARATIVE_CONTINUATION_RE.search(left_visible) is not None
-    ):
-        score += 3
-
-    if (
-        first_left in _SUBORDINATE_STARTS
-        and first_right in _CONTINUATION_PRONOUNS
-        and len(left_words) >= 3
-        and len(right_words) >= 3
-        and _likely_complete_clause(right_visible)
-    ):
-        score += 3
-
-    if (
-        first_right in _WH_STARTS
-        and len(right_words) >= 3
-        and _starts_new_sentence(right_visible)
-        and _COMPLEMENT_CONTINUATION_RE.search(left_visible) is not None
-    ):
-        score += 4
-
-    if (
-        first_right in _CONTINUATION_STARTS
-        and not _ends_strong_sentence(left_visible)
-        and len(right_words) >= 2
-    ):
-        score += 2
-    return score
+    '''Backward-compatible wrapper using English lexical rules.'''
+    return EnglishBoundaryProfile()._continuation_structure_score(left, right)
 
 
 def _looks_like_independent_statements(
@@ -327,30 +218,10 @@ def _looks_like_independent_statements(
     right: str,
     continuation_score: int,
 ) -> bool:
-    if continuation_score:
-        return False
-    if not (_likely_complete_clause(left) and _likely_complete_clause(right)):
-        return False
-
-    left_incomplete = _appears_incomplete(left)
-    right_incomplete = _appears_incomplete(right)
-    right_visible = _visible_text(right)
-    right_words = _words(right_visible)
-    right_starts_lowercase_question = (
-        bool(right_words)
-        and right_words[0].casefold() in _WH_STARTS
-        and _ends_strong_sentence(right_visible)
+    '''Backward-compatible wrapper using English lexical rules.'''
+    return EnglishBoundaryProfile()._looks_like_independent_statements(
+        left, right, continuation_score
     )
-    if left_incomplete and not (
-        _ends_strong_sentence(right_visible)
-        and (_starts_new_sentence(right_visible) or right_starts_lowercase_question)
-    ):
-        return False
-    if right_incomplete and not _ends_strong_sentence(right_visible):
-        return False
-
-    right_starts_sentence = _starts_new_sentence(right_visible)
-    return right_starts_sentence or right_starts_lowercase_question
 
 @dataclass(frozen=True, slots=True)
 class SubtitleSegment:
@@ -393,14 +264,12 @@ class InvalidGroupingResponse(ValueError):
     """Raised when a model response cannot be mapped to the original cues."""
 
 
-
 class BoundaryEvidence(TypedDict):
     """Model evidence for one original subtitle cue boundary."""
 
     leftSegmentId: str
     rightSegmentId: str
     modelProbability: float | None
-
 
 
 class BoundaryDecision(TypedDict):
@@ -467,7 +336,7 @@ def parse_srt(content: str) -> list[SubtitleSegment]:
 
     segments: list[SubtitleSegment] = []
     seen_ids: set[str] = set()
-    blocks = re.split(r"\r?\n\s*\r?\n", content.strip()) if content.strip() else []
+    blocks = re.split(r"\r?\n\s*\r?\n", content.strip("\r\n")) if content.strip() else []
     for position, block in enumerate(blocks, start=1):
         lines = [line.rstrip("\r") for line in block.splitlines()]
         if not lines:
@@ -533,8 +402,6 @@ def _validate_segments(segments: Sequence[SubtitleSegment]) -> list[SubtitleSegm
     if any(result[index].start_ms < result[index - 1].start_ms for index in range(1, len(result))):
         raise ValueError("subtitle segments must be ordered by start time")
     return result
-
-
 
 
 def _segment_ids_from_value(value: Any) -> list[str]:
@@ -751,9 +618,13 @@ def _source_cue_order_reason(left: SubtitleSegment, right: SubtitleSegment) -> s
         return "source cues are not consecutive"
     return None
 
-
-def _text_corruption_reason(left: SubtitleSegment, right: SubtitleSegment) -> str | None:
-    join_issue = text_join_issue(left.text, right.text)
+def _text_corruption_reason(
+    left: SubtitleSegment,
+    right: SubtitleSegment,
+    language_profile: BoundaryLanguageProfile | None = None,
+) -> str | None:
+    profile = language_profile or EnglishBoundaryProfile()
+    join_issue = profile.text_join_issue(left.text, right.text)
     if join_issue is not None:
         return f"joining would corrupt text: {join_issue}"
 
@@ -769,9 +640,10 @@ def _boundary_hard_break_reason(
     right: SubtitleSegment,
     gap_ms: int,
     config: BoundaryPolicyConfig,
+    language_profile: BoundaryLanguageProfile | None = None,
 ) -> str | None:
     # Different explicit speakers are always a hard break.
-    if left.speaker is not None and right.speaker is not None and left.speaker != right.speaker:
+    if (left.speaker is not None and right.speaker is not None and _normalise_speaker(left.speaker) != _normalise_speaker(right.speaker)):
         return "adjacent cues have different explicit speakers"
     # A cue with multiple speakers makes cross-cue merging unsafe.
     if left.contains_multiple_speakers:
@@ -789,7 +661,7 @@ def _boundary_hard_break_reason(
             f"cue gap {gap_ms}ms exceeds extreme-gap threshold "
             f"{config.extreme_gap_ms}ms"
         )
-    return _text_corruption_reason(left, right)
+    return _text_corruption_reason(left, right, language_profile=language_profile)
 
 
 def _gap_band(gap_ms: int, config: BoundaryPolicyConfig) -> str:
@@ -816,9 +688,12 @@ def _soft_boundary_decision(
     gap_ms: int,
     model_probability: float,
     config: BoundaryPolicyConfig,
+    language_profile: BoundaryLanguageProfile | None = None,
 ) -> tuple[BoundaryDecisionValue, str]:
     gap_band = _gap_band(gap_ms, config)
-    continuation_score = _continuation_structure_score(left.text, right.text)
+    profile = language_profile or EnglishBoundaryProfile()
+    signals = profile.analyse_boundary(left.text, right.text)
+    continuation_score = signals.continuation_score
     # Apply dialogue dash penalty — anonymous dashes are strong structural break
     # evidence but allow very strong grammatical/model continuation to remain eligible.
     has_dash_marker = any(m == "-" for m in left.speaker_markers) or any(
@@ -827,11 +702,7 @@ def _soft_boundary_decision(
     if config.dialogue_dash_continuation_penalty and has_dash_marker:
         continuation_score = max(0, continuation_score - config.dialogue_dash_continuation_penalty)
     strong_continuation = continuation_score >= config.min_continuation_score
-    independent_statements = _looks_like_independent_statements(
-        left.text,
-        right.text,
-        continuation_score if strong_continuation else 0,
-    )
+    independent_statements = signals.independent_statements if not strong_continuation else False
 
     if (
         strong_continuation
@@ -866,7 +737,6 @@ def _soft_boundary_decision(
         return "break", "model probability favors a sentence boundary"
     return "uncertain", "soft boundary evidence is exactly ambiguous"
 
-
 class BoundaryScoringApi(Protocol):
     """Protocol for boundary probability scoring services.
 
@@ -888,6 +758,7 @@ class SubtitleSentenceReconstructor:
         policy_config: BoundaryPolicyConfig | None = None,
         max_gap_ms: int | None = None,
         debug: bool = False,
+        language_profile: BoundaryLanguageProfile | None = None,
     ) -> None:
         if policy_config is not None and not isinstance(policy_config, BoundaryPolicyConfig):
             raise TypeError("policy_config must be a BoundaryPolicyConfig")
@@ -910,6 +781,7 @@ class SubtitleSentenceReconstructor:
         self.boundary_api = boundary_api
         self.policy_config = policy_config or DEFAULT_BOUNDARY_POLICY_CONFIG
         self.debug = debug
+        self.language_profile = language_profile or EnglishBoundaryProfile()
 
     def _log_boundary_issue(
         self,
@@ -975,6 +847,7 @@ class SubtitleSentenceReconstructor:
                 right,
                 gap_ms,
                 self.policy_config,
+                language_profile=self.language_profile,
             )
             if hard_reason is not None:
                 decision: BoundaryDecisionValue = "break"
@@ -999,6 +872,7 @@ class SubtitleSentenceReconstructor:
                     gap_ms,
                     model_probability,
                     self.policy_config,
+                    language_profile=self.language_profile,
                 )
 
             if decision != "join" and self.debug:
@@ -1067,8 +941,6 @@ class SubtitleSentenceReconstructor:
     def reconstruct_timeline(self, segments: Sequence[SubtitleSegment]) -> "SubtitleTimeline":
         ordered = _validate_segments(segments)
         return SubtitleTimeline(segments=ordered, sentences=self.reconstruct(ordered))
-
-
 
 
 def _groups_from_sentence_texts(
