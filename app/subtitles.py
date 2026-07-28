@@ -78,6 +78,9 @@ _VOICE_TAG_RE = re.compile(
     r"[A-Z][A-Z0-9 ._-]{1,30}:)"
 )
 _FORMATTING_TAG_RE = re.compile(r"</?[^>]+>|\{\\[^}]+\}")
+_VOICE_TAG_EXTRACT_RE = re.compile(r"^\s*<v\s+(\S[^>]*)>")
+_BRACKET_SPEAKER_RE = re.compile(r"^\s*\[([A-Z][A-Z0-9 ._-]{1,30})\]\s*")
+_LABEL_SPEAKER_RE = re.compile(r"^\s*([A-Z][A-Z0-9 ._-]{1,30}):(?:\s|$)")
 _WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)?")
 _CUE_ID_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<number>\d+)$")
 _SUBORDINATE_STARTS = frozenset(
@@ -153,6 +156,66 @@ def _ends_strong_sentence(text: str) -> bool:
 
 def _has_speaker_marker(text: str) -> bool:
     return _DIALOGUE_DASH_RE.match(text) is not None or _VOICE_TAG_RE.match(text) is not None
+
+
+def _extract_speaker_from_line(line: str) -> str | None:
+    """Extract an explicit named speaker from a single line, or None.
+
+    Returns a speaker identity string for strong explicit structures only.
+    Returns None for dash-prefixed dialogue (no named speaker inferred).
+    """
+    m = _VOICE_TAG_EXTRACT_RE.match(line)
+    if m:
+        name = m.group(1).strip()
+        if name:
+            return name
+    m = _BRACKET_SPEAKER_RE.match(line)
+    if m:
+        return m.group(1).strip()
+    m = _LABEL_SPEAKER_RE.match(line)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _detect_cue_speakers(
+    text_lines: list[str],
+    normalized_text: str,
+) -> dict:
+    """Detect speaker markers and structure from a cue's original text lines.
+
+    Returns a dict with:
+      - speaker: explicit named speaker or None
+      - speaker_markers: tuple of detected marker strings
+      - contains_multiple_speakers: bool
+    """
+    markers: list[str] = []
+    named_speakers: set[str] = set()
+    dash_count = 0
+
+    for line in text_lines:
+        named = _extract_speaker_from_line(line)
+        if named is not None:
+            named_speakers.add(named)
+            markers.append(named)
+        elif _DIALOGUE_DASH_RE.match(line):
+            dash_count += 1
+            if "-" not in markers:
+                markers.append("-")
+
+    speaker: str | None = None
+    if len(named_speakers) == 1:
+        speaker = next(iter(named_speakers))
+
+    multiple_speakers = len(named_speakers) > 1 or dash_count > 1 or (
+        dash_count > 0 and len(named_speakers) > 0
+    )
+
+    return {
+        "speaker": speaker,
+        "speaker_markers": tuple(markers),
+        "contains_multiple_speakers": multiple_speakers,
+    }
 
 
 def _starts_new_sentence(text: str) -> bool:
@@ -285,6 +348,10 @@ class SubtitleSegment:
     start_ms: int
     end_ms: int
     speaker: str | None = None
+    raw_text: str | None = None
+    lines: tuple[str, ...] = ()
+    speaker_markers: tuple[str, ...] = ()
+    contains_multiple_speakers: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.segment_id, str) or not self.segment_id.strip():
@@ -303,6 +370,49 @@ class ReconstructedSentencePart:
     text: str
     start_ms: int
     end_ms: int
+    raw_text: str | None = None
+    lines: tuple[str, ...] = ()
+    speaker: str | None = None
+    speaker_markers: tuple[str, ...] = ()
+    contains_multiple_speakers: bool = False
+
+
+class InvalidGroupingResponse(ValueError):
+    """Raised when a model response cannot be mapped to the original cues."""
+
+
+BoundaryDecisionValue = Literal["join", "break", "uncertain"]
+
+
+class BoundaryEvidence(TypedDict):
+    """Model evidence for one original subtitle cue boundary."""
+
+    leftSegmentId: str
+    rightSegmentId: str
+    boundaryProbability: float | None
+
+
+class BoundaryDecision(TypedDict):
+    """One independent decision for an original subtitle cue boundary."""
+
+    leftSegmentId: str
+    rightSegmentId: str
+    decision: BoundaryDecisionValue
+    reason: str
+    modelProbability: float | None
+    gapMs: int
+
+
+def _timestamp_to_ms(timestamp: str) -> int:
+    match = _TIMESTAMP_RE.fullmatch(timestamp.replace(",", "."))
+    if match is None:
+        raise ValueError(f"invalid SRT timestamp: {timestamp!r}")
+    return (
+        int(match["hours"]) * 3_600_000
+        + int(match["minutes"]) * 60_000
+        + int(match["seconds"]) * 1_000
+        + int(match["millis"])
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -328,53 +438,15 @@ class ReconstructedSentence:
                     "text": part.text,
                     "startMs": part.start_ms,
                     "endMs": part.end_ms,
+                    "rawText": part.raw_text,
+                    "lines": list(part.lines) if part.lines else None,
+                    "speaker": part.speaker,
+                    "speakerMarkers": list(part.speaker_markers) if part.speaker_markers else None,
+                    "containsMultipleSpeakers": part.contains_multiple_speakers or None,
                 }
                 for part in self.parts
             ],
         }
-
-
-class InvalidGroupingResponse(ValueError):
-    """Raised when a model response cannot be mapped to the original cues."""
-
-
-BoundaryDecisionValue = Literal["join", "break", "uncertain"]
-
-
-class BoundaryEvidence(TypedDict):
-    """Model evidence for one original subtitle cue boundary."""
-
-    leftSegmentId: str
-    rightSegmentId: str
-    modelProbability: float | None
-
-
-class BoundaryDecision(TypedDict):
-    """One independent decision for an original subtitle cue boundary."""
-
-    leftSegmentId: str
-    rightSegmentId: str
-    decision: BoundaryDecisionValue
-    reason: str
-    modelProbability: float | None
-    gapMs: int
-
-
-class BoundaryScoringApi(Protocol):
-    def score_boundaries(self, segments: Sequence[str]) -> Any:
-        """Return model evidence for every original cue boundary."""
-
-
-def _timestamp_to_ms(timestamp: str) -> int:
-    match = _TIMESTAMP_RE.fullmatch(timestamp.replace(",", "."))
-    if match is None:
-        raise ValueError(f"invalid SRT timestamp: {timestamp!r}")
-    return (
-        int(match["hours"]) * 3_600_000
-        + int(match["minutes"]) * 60_000
-        + int(match["seconds"]) * 1_000
-        + int(match["millis"])
-    )
 
 
 def parse_srt(content: str) -> list[SubtitleSegment]:
@@ -407,7 +479,23 @@ def parse_srt(content: str) -> list[SubtitleSegment]:
         text = " ".join(line.strip() for line in lines[timing_line_index + 1 :] if line.strip())
         if not text:
             raise ValueError(f"SRT cue {segment_id!r} has no text")
-        segments.append(SubtitleSegment(segment_id, text, start_ms, end_ms))
+        # Preserve original text lines and raw representation
+        original_text_lines = [
+            line.strip() for line in lines[timing_line_index + 1 :]
+        ]
+        raw_text = "\n".join(original_text_lines)
+        speaker_info = _detect_cue_speakers(original_text_lines, text)
+        segments.append(SubtitleSegment(
+            segment_id,
+            text,
+            start_ms,
+            end_ms,
+            speaker=speaker_info["speaker"],
+            raw_text=raw_text,
+            lines=tuple(original_text_lines),
+            speaker_markers=speaker_info["speaker_markers"],
+            contains_multiple_speakers=speaker_info["contains_multiple_speakers"],
+        ))
         seen_ids.add(segment_id)
 
     _validate_segments(segments)
@@ -534,6 +622,11 @@ def _parts_for_group(group: Sequence[str], by_id: Mapping[str, SubtitleSegment])
             text=by_id[segment_id].text,
             start_ms=by_id[segment_id].start_ms,
             end_ms=by_id[segment_id].end_ms,
+            raw_text=by_id[segment_id].raw_text,
+            lines=by_id[segment_id].lines,
+            speaker=by_id[segment_id].speaker,
+            speaker_markers=by_id[segment_id].speaker_markers,
+            contains_multiple_speakers=by_id[segment_id].contains_multiple_speakers,
         )
         for segment_id in group
     ]
@@ -663,11 +756,22 @@ def _boundary_hard_break_reason(
     gap_ms: int,
     config: BoundaryPolicyConfig,
 ) -> str | None:
+    # Different explicit speakers are always a hard break.
     if left.speaker != right.speaker and (left.speaker is not None or right.speaker is not None):
         return "adjacent cues have different explicit speakers"
-    if _has_speaker_marker(right.text):
-        return "next cue has a dialogue or voice marker"
-
+    # A cue with multiple speakers makes cross-cue merging unsafe.
+    if left.contains_multiple_speakers:
+        return "left cue contains multiple speakers"
+    if right.contains_multiple_speakers:
+        return "right cue contains multiple speakers"
+    # Next cue introduces an explicit speaker when left has none.
+    if right.speaker is not None and left.speaker is None:
+        return "right cue introduces a new explicit speaker"
+    if _has_speaker_marker(right.text) and not _has_speaker_marker(left.text):
+        return "next cue has a dialogue marker"
+    # Both sides have dialogue markers — likely a turn, protect it.
+    if _has_speaker_marker(left.text) and _has_speaker_marker(right.text):
+        return "both cues have dialogue markers, likely a turn boundary"
     source_order_reason = _source_cue_order_reason(left, right)
     if source_order_reason is not None:
         return source_order_reason

@@ -324,24 +324,35 @@ def evaluate_fixture(
         if cases[r["case"] - 1].get("expected") == "ambiguous"
     ]
 
-    expected_join = sum(cases[r["case"] - 1]["expected"] == "join" for r in labeled_results)
-    predicted_join = sum(r["predicted"] == "join" for r in labeled_results)
+    # Deduplicate by (left, right, gapMs) — regression aliases share text and timing.
+    seen_keys: set[tuple[str, str, int | None]] = set()
+    deduped_labeled: list[dict] = []
+    for r in labeled_results:
+        case = cases[r["case"] - 1]
+        key = (case.get("left", ""), case.get("right", ""), case.get("gapMs"))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped_labeled.append(r)
+
+    # Compute aggregate metrics from deduplicated boundaries only
+    expected_join = sum(cases[r["case"] - 1]["expected"] == "join" for r in deduped_labeled)
+    predicted_join = sum(r["predicted"] == "join" for r in deduped_labeled)
     true_join = sum(
         cases[r["case"] - 1]["expected"] == "join" and r["predicted"] == "join"
-        for r in labeled_results
+        for r in deduped_labeled
     )
-    expected_break = sum(cases[r["case"] - 1]["expected"] == "break" for r in labeled_results)
+    expected_break = sum(cases[r["case"] - 1]["expected"] == "break" for r in deduped_labeled)
     true_break = sum(
         cases[r["case"] - 1]["expected"] == "break" and r["predicted"] == "break"
-        for r in labeled_results
+        for r in deduped_labeled
     )
     false_merges = sum(
         cases[r["case"] - 1]["expected"] == "break" and r["predicted"] == "join"
-        for r in labeled_results
+        for r in deduped_labeled
     )
     false_negatives = sum(
         cases[r["case"] - 1]["expected"] == "join" and r["predicted"] != "join"
-        for r in labeled_results
+        for r in deduped_labeled
     )
     misclassified = [
         r for r in case_results
@@ -369,7 +380,6 @@ def evaluate_fixture(
         "misclassified": misclassified,
         "ambiguous": ambiguous_results,
     }
-
 
 def load_real_window(
     path: Path = DEFAULT_WINDOW_SRT,

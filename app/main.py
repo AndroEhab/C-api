@@ -70,6 +70,10 @@ class SubtitleSegmentRequest(BaseModel):
     start_ms: int = Field(..., alias="startMs", ge=0)
     end_ms: int = Field(..., alias="endMs", ge=0)
     speaker: str | None = Field(default=None)
+    raw_text: str | None = Field(default=None, alias="rawText")
+    lines: list[str] = Field(default_factory=list)
+    speaker_markers: list[str] = Field(default_factory=list, alias="speakerMarkers")
+    contains_multiple_speakers: bool = Field(default=False, alias="containsMultipleSpeakers")
 
     @field_validator("text")
     @classmethod
@@ -91,8 +95,11 @@ class SubtitleSegmentRequest(BaseModel):
             start_ms=self.start_ms,
             end_ms=self.end_ms,
             speaker=self.speaker,
+            raw_text=self.raw_text,
+            lines=tuple(self.lines),
+            speaker_markers=tuple(self.speaker_markers),
+            contains_multiple_speakers=self.contains_multiple_speakers,
         )
-
 
 class ReconstructedSentencePartResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -101,7 +108,11 @@ class ReconstructedSentencePartResponse(BaseModel):
     text: str
     start_ms: int = Field(..., alias="startMs")
     end_ms: int = Field(..., alias="endMs")
-
+    raw_text: str | None = Field(default=None, alias="rawText")
+    lines: list[str] | None = Field(default=None)
+    speaker: str | None = Field(default=None)
+    speaker_markers: list[str] | None = Field(default=None, alias="speakerMarkers")
+    contains_multiple_speakers: bool | None = Field(default=None, alias="containsMultipleSpeakers")
 
 class ReconstructedSentenceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)

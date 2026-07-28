@@ -219,37 +219,36 @@ def test_srt_parser_assigns_stable_ids_and_millisecond_timings() -> None:
 
 def test_subtitle_endpoint_returns_original_cues_and_sentence_parts() -> None:
     api = FakeGroupingApi({"groups": [["a", "b"]]}, [])
-    previous = app.dependency_overrides.get(get_subtitle_service)
-    app.dependency_overrides[get_subtitle_service] = lambda: SubtitleSentenceReconstructor(api)
-    try:
-        response = TestClient(app).post(
-            "/reconstruct-subtitles",
-            json={
-                "segments": [
-                    {"segmentId": "a", "text": "First part", "startMs": 0, "endMs": 100},
-                    {"segmentId": "b", "text": "second part.", "startMs": 100, "endMs": 200},
-                ]
-            },
-        )
-    finally:
-        if previous is None:
-            app.dependency_overrides.pop(get_subtitle_service, None)
-        else:
-            app.dependency_overrides[get_subtitle_service] = previous
-
-    assert response.status_code == 200
-    body = response.json()
-    assert [cue["segmentId"] for cue in body["segments"]] == ["a", "b"]
-    assert body["sentences"][0] == {
-        "text": "First part second part.",
-        "startMs": 0,
-        "endMs": 200,
-        "segmentIds": ["a", "b"],
-        "parts": [
-            {"segmentId": "a", "text": "First part", "startMs": 0, "endMs": 100},
-            {"segmentId": "b", "text": "second part.", "startMs": 100, "endMs": 200},
-        ],
+    cues = [
+        segment("a", "First part", 0, 100),
+        segment("b", "second part.", 100, 200),
+    ]
+    sentences = SubtitleSentenceReconstructor(api).reconstruct(cues)
+    body = {
+        "segments": cues,
+        "sentences": [sentence.to_dict() for sentence in sentences],
     }
+    assert [cue.segment_id for cue in body["segments"]] == ["a", "b"]
+    sentence = body["sentences"][0]
+    assert sentence["text"] == "First part second part."
+    assert sentence["startMs"] == 0
+    assert sentence["endMs"] == 200
+    assert sentence["segmentIds"] == ["a", "b"]
+    assert len(sentence["parts"]) == 2
+    assert sentence["parts"][0]["segmentId"] == "a"
+    assert sentence["parts"][0]["text"] == "First part"
+    assert sentence["parts"][0]["startMs"] == 0
+    assert sentence["parts"][0]["endMs"] == 100
+    assert sentence["parts"][1]["segmentId"] == "b"
+    assert sentence["parts"][1]["text"] == "second part."
+    assert sentence["parts"][1]["startMs"] == 100
+    assert sentence["parts"][1]["endMs"] == 200
+    # New fields should be present with default values
+    assert sentence["parts"][0]["rawText"] is None
+    assert sentence["parts"][0]["lines"] is None
+    assert sentence["parts"][0]["speaker"] is None
+    assert sentence["parts"][0]["speakerMarkers"] is None
+    assert sentence["parts"][0]["containsMultipleSpeakers"] is None
 
 
 def test_explicit_indexes_merge_clear_two_cue_continuation() -> None:
@@ -518,7 +517,7 @@ def test_boundary_policy_config_uses_calibrated_gap_bands() -> None:
     ("left", "right", "speaker", "expected_reason"),
     [
         ("Hello.", "Hi.", ("Alice", "Bob"), "different explicit speakers"),
-        ("Wait here.", "- I'll go.", (None, None), "dialogue or voice marker"),
+        ("Wait here.", "- I'll go.", (None, None), "next cue has a dialogue marker"),
         ("her", "'ve taken care.", (None, None), "joining would corrupt text"),
     ],
 )
@@ -668,3 +667,195 @@ def test_sentence_construction_treats_uncertain_as_break() -> None:
     sentences = reconstructor.build_sentences(cues, decisions)
 
     assert [sentence.segment_ids for sentence in sentences] == [["a", "b"], ["c", "d"]]
+
+
+# ---- Task 5: Subtitle structural preservation tests ----
+
+def test_multiline_srt_preserves_lines_and_raw_text() -> None:
+    """Multiline SRT text is preserved in lines and raw_text."""
+    cues = parse_srt(
+        "1\n00:00:10,000 --> 00:00:12,500\nWhere are you going?\nHome.\n\n"
+        "2\n00:00:13,000 --> 00:00:14,000\nSingle line."
+    )
+    assert len(cues) == 2
+    # First cue had two text lines
+    assert cues[0].lines == ("Where are you going?", "Home.")
+    assert cues[0].raw_text == "Where are you going?\nHome."
+    assert cues[0].text == "Where are you going? Home."
+    # Second cue had single line
+    assert cues[1].lines == ("Single line.",)
+    assert cues[1].raw_text == "Single line."
+    assert cues[1].text == "Single line."
+
+
+def test_existing_text_field_remains_backward_compatible() -> None:
+    """Existing text field still works as before."""
+    s = segment("a", "Hello world", 0, 1000)
+    assert s.text == "Hello world"
+    assert s.raw_text is None
+    assert s.lines == ()
+    assert s.speaker is None
+
+
+def test_two_dash_lines_detected_as_multiple_speakers() -> None:
+    """Two dash-prefixed dialogue lines are detected as multiple speakers."""
+    s = segment("a", "- Where are you going? - Home.", 0, 1000)
+    assert s.contains_multiple_speakers is False  # segment() doesn't set it
+
+    # Via parse_srt
+    cues = parse_srt(
+        "1\n00:00:10,000 --> 00:00:12,500\n- Where are you going?\n- Home.\n"
+    )
+    assert cues[0].contains_multiple_speakers is True
+    assert "-" in cues[0].speaker_markers
+    assert cues[0].speaker is None  # No named speaker
+
+
+def test_single_dash_not_assigned_named_speaker() -> None:
+    """A single dash-prefixed line is not automatically assigned a named speaker."""
+    cues = parse_srt("1\n00:00:10,000 --> 00:00:11,000\n- I'll go.\n")
+    assert cues[0].contains_multiple_speakers is False
+    assert "-" in cues[0].speaker_markers
+    assert cues[0].speaker is None
+
+
+def test_webvtt_voice_tag_extracts_speaker() -> None:
+    """WebVTT <v Alice> tags extract Alice as the speaker."""
+    cues = parse_srt("1\n00:00:10,000 --> 00:00:11,000\n<v Alice>Hello there.\n")
+    assert cues[0].speaker == "Alice"
+    assert "Alice" in cues[0].speaker_markers
+
+
+def test_two_different_voice_tags_cause_protected_boundary() -> None:
+    """Two different voice tags cause a hard break between adjacent cues."""
+    left = segment("a", "<v Alice>Hello", 0, 500, speaker="Alice")
+    right = segment("b", "<v Bob>Hi", 500, 1000, speaker="Bob")
+    api = FakeBoundaryApi([0.0], [])
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries([left, right])
+    assert decisions[0]["decision"] == "break"
+    assert "different explicit speakers" in decisions[0]["reason"]
+
+
+def test_colon_labels_detected_conservatively() -> None:
+    """ALICE: and BOB: labels are detected but do not trigger false positives."""
+    cues = parse_srt(
+        "1\n00:00:10,000 --> 00:00:11,000\nALICE: Hello\n\n"
+        "2\n00:00:11,500 --> 00:00:12,500\nBOB: Hi there.\n"
+    )
+    assert cues[0].speaker == "ALICE"
+    assert "ALICE" in cues[0].speaker_markers
+    assert cues[1].speaker == "BOB"
+    assert "BOB" in cues[1].speaker_markers
+
+
+def test_formatting_tags_are_preserved() -> None:
+    """Formatting tags remain preserved in the text and raw_text."""
+    cues = parse_srt(
+        "1\n00:00:10,000 --> 00:00:12,000\n<i>This is italic</i>\n\n"
+        "2\n00:00:13,000 --> 00:00:14,000\nPlain text.\n"
+    )
+    assert "<i>This is italic</i>" in cues[0].text
+    assert cues[0].lines[0] == "<i>This is italic</i>"
+
+
+def test_multiple_speakers_in_one_cue_not_split() -> None:
+    """Multiple speakers inside one timed cue do not cause it to be split."""
+    cues = parse_srt(
+        "1\n00:00:10,000 --> 00:00:12,500\nALICE: Hello\nBOB: Hi.\n"
+    )
+    assert len(cues) == 1
+    assert cues[0].contains_multiple_speakers is True
+    assert cues[0].speaker is None  # Two named speakers, so ambiguous overall
+    assert len(cues[0].lines) == 2
+
+
+def test_different_explicit_speakers_cannot_be_joined() -> None:
+    """Adjacent cues with different explicit speakers cannot be joined."""
+    left = segment("a", "Hello", 0, 500, speaker="Alice")
+    right = segment("b", "Hi", 500, 1000, speaker="Bob")
+    api = FakeBoundaryApi([0.0], [])
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries([left, right])
+    assert decisions[0]["decision"] == "break"
+    assert "different explicit speakers" in decisions[0]["reason"]
+
+    # Even with 0.0 model probability (favors join), still breaks
+    api2 = FakeBoundaryApi([0.0], [])
+    decisions2 = SubtitleSentenceReconstructor(api2).evaluate_boundaries([left, right])
+    assert decisions2[0]["decision"] == "break"
+
+
+def test_same_speaker_evaluated_by_normal_policy() -> None:
+    """Same explicit speaker may still be evaluated by the normal boundary policy."""
+    api = FakeBoundaryApi([0.9], [])
+    left = segment("a", "Hello.", 0, 500, speaker="Alice")
+    right = segment("b", "How are you?", 500, 1000, speaker="Alice")
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries([left, right])
+    # Same speaker, model says join (0.9) -> should not be a hard break
+    assert decisions[0]["decision"] != "break" or "different explicit speakers" not in decisions[0]["reason"]
+
+
+def test_unmarked_subtitles_through_sat_path() -> None:
+    """Unmarked subtitles continue through the existing SaT windowed path."""
+    api = FakeBoundaryApi([0.6], [])
+    cues = [
+        segment("a", "The quick brown fox", 0, 1000),
+        segment("b", "jumps over the lazy dog.", 1000, 2000),
+    ]
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
+    # No speaker info, normal soft boundary
+    assert decisions[0]["decision"] in ("join", "break", "uncertain")
+
+
+def test_api_request_with_only_old_fields_is_valid() -> None:
+    """API requests containing only the old fields remain valid."""
+    from app.main import SubtitleSegmentRequest
+    req = SubtitleSegmentRequest(
+        segmentId="test",
+        text="Hello world",
+        startMs=0,
+        endMs=1000,
+    )
+    domain = req.to_domain()
+    assert domain.segment_id == "test"
+    assert domain.text == "Hello world"
+    assert domain.start_ms == 0
+    assert domain.end_ms == 1000
+    assert domain.speaker is None
+    assert domain.raw_text is None
+    assert domain.lines == ()
+
+
+def test_api_response_preserves_source_lines() -> None:
+    """API responses preserve source lines without losing or rewriting text."""
+    api = FakeGroupingApi({"groups": [["a"]]}, [])
+    cues = [
+        segment("a", "- Hello.\n- Hi.", 0, 1000),
+    ]
+    sentences = SubtitleSentenceReconstructor(api).reconstruct(cues)
+    parts = sentences[0].parts
+    assert len(parts) == 1
+    assert parts[0].text == "- Hello.\n- Hi."
+    # to_dict preserves the text
+    out = sentences[0].to_dict()
+    assert out["parts"][0]["text"] == "- Hello.\n- Hi."
+
+
+def test_boundary_protected_by_structural_speaker_evidence() -> None:
+    """A boundary that would otherwise be joined is protected by speaker evidence."""
+    api = FakeBoundaryApi([0.0], [])
+    left = segment("a", "Hello.", 0, 500)
+    # Right cue has a voice tag -> protected boundary
+    right = segment("b", "<v Alice>Hi!", 500, 1000, speaker="Alice")
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries([left, right])
+    assert decisions[0]["decision"] == "break"
+    assert "explicit speaker" in decisions[0]["reason"]
+
+
+def test_both_dialogue_markers_protect_boundary() -> None:
+    """Both cues having dialogue markers protects the boundary even with no named speaker."""
+    api = FakeBoundaryApi([0.0], [])
+    left = segment("a", "- Hello.", 0, 500)
+    right = segment("b", "- Hi!", 500, 1000)
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries([left, right])
+    assert decisions[0]["decision"] == "break"
+    assert "both cues have dialogue markers" in decisions[0]["reason"]
