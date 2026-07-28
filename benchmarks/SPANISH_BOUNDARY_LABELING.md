@@ -170,3 +170,61 @@ Right: Quizá deberíamos preguntar.
 - **Coordinating conjunctions** (y, e, o, pero, sino) do not automatically mean JOIN — examine if the right cue is a complete clause or a continuation.
 - **Subordinate conjunctions** (que, porque, cuando, mientras, aunque, si) at the start of a right cue often suggest JOIN.
 - **Timing gap** is not a label criterion — ignore it for labeling.
+
+---
+
+## Review Policy
+
+This policy applies to the Spanish benchmark and is designed to be reusable for future languages.
+
+### Label-Confidence Fields
+
+Every boundary record carries review metadata:
+
+| Field | Initial value | After review |
+|---|---|---|
+| `goldLabel` | `null` | `JOIN`, `BREAK`, or `AMBIGUOUS` |
+| `labelConfidence` | `null` | `high`, `medium`, or `low` |
+| `reviewerCount` | `0` | 1 after first review, 2 after second |
+| `needsSecondReview` | `false` | Set to `true` if a second review is needed |
+| `reviewReason` | `""` | Free-text rationale for the label choice |
+| `reviewStatus` | `"unreviewed"` | `"reviewed"`, `"needs_adjudication"`, or `"adjudicated"` |
+
+### Confidence Guidelines
+
+| Confidence | Meaning |
+|---|---|
+| `high` | Clear, unambiguous boundary based on Spanish grammar, punctuation, speaker turns, or structure. |
+| `medium` | Reasonable case could be made for the other label, but a clear decision is possible. |
+| `low` | Both JOIN and BREAK are defensible; the label is a best-effort judgment. After confirmation, should be re-assigned as `AMBIGUOUS`. |
+
+### Review Workflow
+
+1. **First review:** Every boundary receives one human review with a label and confidence.
+2. **Second review:** Every `JOIN` marked `medium` or `low` confidence receives a second review. At least 20% of the complete dataset receives a second review.
+3. **Adjudication:** Every disagreement between reviewers receives a final adjudication by a third reviewer.
+4. **Ambiguous exclusion:** Entries with `goldLabel: "AMBIGUOUS"` are excluded from primary precision and recall calculations.
+5. **Development set:** Labels in the development split may be inspected (but not modified based on model performance) during tuning.
+6. **Held-out test set:** Predictions on the test split must not be inspected until the review policy explicitly permits final evaluation.
+
+### `needsSecondReview` Rules
+
+- A reviewer sets `needsSecondReview: true` when:
+  - The assigned label is `JOIN` with confidence `medium` or `low`.
+  - The boundary involves a translation artifact or a structural ambiguity the reviewer is unsure about.
+  - The boundary is an edge case not covered by the core rules.
+- The field is cleared once the second review is recorded.
+
+---
+
+## Benchmark Maturity Levels
+
+Maturity is computed from the review state of the whole dataset report and reported in `spanish_boundary_dataset_report.json`.
+
+| Level | Requirements |
+|---|---|
+| `exploratory` | 75+ reviewed non-ambiguous boundaries; at least two major decision categories (JOIN-like and BREAK-like) represented in sampling tags. |
+| `usable` | 150+ reviewed non-ambiguous boundaries; two or more productions (sources); major structural and timing dimensions represented; partial second review completed (at least one entry has two reviews). |
+| `validated` | 250+ reviewed non-ambiguous boundaries; strong native-language coverage (at least 50 entries from originally-Spanish sources); both dialogue and monologue structures present; held-out test set exists; at least 20% of entries have a second review. |
+
+The current Spanish benchmark may become operationally ready before it becomes validated.
