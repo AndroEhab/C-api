@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .language_profile import resolve_profile
+from .language_profile import normalise_speaker, resolve_profile, resolve_profile_with_metadata
 from .model import (
     DEFAULT_THRESHOLD,
     WORD_PATTERN,
@@ -18,7 +18,6 @@ from .sat import SaTSentenceReconstructor, SaTUnavailableError
 from .subtitles import (
     BoundaryPolicyConfig,
     SubtitleSegment,
-    SubtitleSentenceReconstructor,
     _detect_cue_speakers,
     parse_srt_file,
 )
@@ -128,9 +127,9 @@ class SubtitleSegmentRequest(BaseModel):
         derived_markers: tuple[str, ...] = derived["speaker_markers"]
         derived_multiple: bool = derived["contains_multiple_speakers"]
 
-        # If client provided a speaker, it must match derivation.
+        # If client provided a speaker, it must match derivation after normalisation.
         if self.speaker is not None and derived_speaker is not None:
-            if self.speaker != derived_speaker:
+            if normalise_speaker(self.speaker) != normalise_speaker(derived_speaker):
                 raise ValueError(
                     f"speaker {self.speaker!r} contradicts line-derived "
                     f"speaker {derived_speaker!r}"
@@ -194,8 +193,10 @@ class SubtitleReconstructionRequest(BaseModel):
 class ReconstructionDiagnostics(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    requested_language: str = Field(default="en", alias="requestedLanguage")
     resolved_language: str = Field(default="en", alias="resolvedLanguage")
     profile: str = Field(default="EnglishBoundaryProfile", alias="profile")
+    profile_code: str = Field(default="en", alias="profileCode")
 
 
 class SubtitleReconstructionResponse(BaseModel):
@@ -394,15 +395,21 @@ def reconstruct_subtitles(
 ) -> SubtitleReconstructionResponse:
     """Reconstruct sentence context while retaining every original cue."""
     from app.subtitles import SubtitleSentenceReconstructor as SSR
-    language_profile = resolve_profile(request.language)
-    reconstructor = SSR(service, language_profile=language_profile)
+    profile, requested_language, resolved_language, profile_code = resolve_profile_with_metadata(
+        request.language
+    )
+    # Pass the profile to the SaT service so score_boundaries uses profile‑aware joining.
+    service.profile = profile
+    reconstructor = SSR(service, language_profile=profile)
     segments = [segment.to_domain() for segment in request.segments]
     sentences = reconstructor.reconstruct(segments)
     return SubtitleReconstructionResponse(
         segments=request.segments,
         sentences=[ReconstructedSentenceResponse(**sentence.to_dict()) for sentence in sentences],
         diagnostics=ReconstructionDiagnostics(
-            resolvedLanguage=language_profile.code,
-            profile=type(language_profile).__name__,
+            requestedLanguage=requested_language,
+            resolvedLanguage=resolved_language,
+            profile=type(profile).__name__,
+            profileCode=profile_code,
         ),
     )

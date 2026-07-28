@@ -15,22 +15,26 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, Sequence
+
 
 
 # ───────────────────────────── helpers (language‑neutral) ─────────────────────
 
 _FORMATTING_TAG_RE = re.compile(r"</?[^>]+>|\{\\[^}]+\}")
-_STRONG_SENTENCE_END_RE = re.compile(r"""[.!?…]+(?:["'’”»)\]}]+)?$""")
+_STRONG_SENTENCE_END_RE = re.compile(r"""[.!?…؟？！]+(?:["'’”»)\]}]+)?$""")
 _WORD_RE_UNICODE = re.compile(r"\w(?:[^\W\d_](?:['’][^\W\d_])?)*", re.UNICODE)
 _DIALOGUE_DASH_RE = re.compile(r"^\s*(?:--?|[–—]|>>)\s+")
 _VOICE_TAG_RE = re.compile(
-    r"^\s*(?:<v(?:\s+[^>]*)?>|\[[A-Z][A-Z0-9 ._-]{1,30}\]\s*|"
-    r"[A-Z][A-Z0-9 ._-]{1,30}:)"
+    r"^\s*(?:<v(?:\s+[^>]*)?>|"
+    r"\[[^\W\d_][^\W\d_0-9 ._-]{0,30}\]\s*|"
+    r"[A-Z\u00C0-\u024F][A-Za-z0-9 ._-]{0,30}:)"
 )
 _VOICE_TAG_EXTRACT_RE = re.compile(r"^\s*<v\s+(\S[^>]*)>")
-_BRACKET_SPEAKER_RE = re.compile(r"^\s*\[([A-Z][A-Z0-9 ._-]{1,30})\]\s*")
-_LABEL_SPEAKER_RE = re.compile(r"^\s*([A-Z][A-Z0-9 ._-]{1,30}):(?:\s|$)")
+_BRACKET_SPEAKER_RE = re.compile(r"^\s*\[([^\W\d_][^\W\d_0-9 ._-]{0,30})\]\s*")
+_LABEL_SPEAKER_RE = re.compile(r"^\s*([A-Z\u00C0-\u024F][A-Z\u00C0-\u024F0-9 ._-]{1,30}):(?:\s|$)")
+_CLOSING_TAG_RE = re.compile(r"^</[^>]+>")
+
 
 
 def visible_text(text: str) -> str:
@@ -54,8 +58,8 @@ def has_speaker_marker(text: str) -> bool:
 
 
 def text_contains_question(text: str) -> bool:
-    """Return True when visible text ends with ``?`` (universal signal)."""
-    return visible_text(text).rstrip(" ""'’\"»)]}").endswith("?")
+    """Return True when visible text ends with a question mark (universal signal)."""
+    return visible_text(text).rstrip(" ""'’\"»)]}").rstrip().endswith(("?", "؟", "？"))
 
 
 # ─────────────────────────────── signals ──────────────────────────────────────
@@ -75,6 +79,46 @@ class BoundaryLanguageSignals:
     independent_statements: bool = False
     """True when the left and right cues each appear to be a complete,
     independent statement in the target language."""
+
+
+
+@dataclass(frozen=True)
+class ProfileThresholds:
+    """Threshold recommendations for one language profile.
+
+    ``join_max_probability``: model probabilities at or below this
+    value are eligible for JOIN.
+
+    ``break_min_probability``: model probabilities at or above this
+    value are eligible for BREAK.
+
+    Probabilities between the two thresholds produce UNCERTAIN (safe BREAK).
+
+    When both thresholds are equal the profile has no uncertainty interval
+    (current English behaviour).
+    """
+
+    join_max_probability: float
+    break_min_probability: float
+    continuation_override_max_probability: float = 0.95
+
+    def __post_init__(self) -> None:
+        if isinstance(self.join_max_probability, bool) or not isinstance(self.join_max_probability, (int, float)):
+            raise ValueError("join_max_probability must be numeric")
+        if isinstance(self.break_min_probability, bool) or not isinstance(self.break_min_probability, (int, float)):
+            raise ValueError("break_min_probability must be numeric")
+        if isinstance(self.continuation_override_max_probability, bool) or not isinstance(self.continuation_override_max_probability, (int, float)):
+            raise ValueError("continuation_override_max_probability must be numeric")
+        if not 0.0 <= self.join_max_probability <= 1.0:
+            raise ValueError("join_max_probability must be within [0, 1]")
+        if not 0.0 <= self.break_min_probability <= 1.0:
+            raise ValueError("break_min_probability must be within [0, 1]")
+        if not 0.0 <= self.continuation_override_max_probability <= 1.0:
+            raise ValueError("continuation_override_max_probability must be within [0, 1]")
+        if self.join_max_probability > self.break_min_probability:
+            raise ValueError("join_max_probability must not exceed break_min_probability")
+        if self.break_min_probability > self.continuation_override_max_probability:
+            raise ValueError("break_min_probability must not exceed continuation_override_max_probability")
 
 
 # ───────────────────────────── language profile protocol ──────────────────────
@@ -97,6 +141,23 @@ class BoundaryLanguageProfile(Protocol):
         """Return a reason string when joining *left* and *right* could corrupt
         text for this language, or ``None`` when joining is safe."""
         ...
+
+    def join_segments(self, segments: Sequence[str]) -> tuple[str, list[int]]:
+        """Join segments using this profile's language rules.
+
+        Returns ``(joined_text, boundary_offsets)`` where
+        ``boundary_offsets`` are the zero-based character indexes of each
+        boundary's last character in ``joined_text``.
+        """
+        ...
+
+    def get_thresholds(self, gap_band: str) -> ProfileThresholds:
+        """Return threshold recommendations for timing *gap_band*.
+
+        ``gap_band`` is one of ``"normal"``, ``"medium"``, or ``"large"``.
+        """
+        ...
+
 
 
 def _normalise_speaker(name: str) -> str:
@@ -155,19 +216,79 @@ class NeutralBoundaryProfile:
         """Return True when the two fragments should not receive a space
         separator in the neutral profile.
 
-        The neutral profile only omits the space for known punctuation and
-        bracket characters that are universal typographic conventions.
+        The neutral profile only omits the space for known punctuation,
+        bracket characters, and closing formatting tags that are universal
+        typographic conventions.
         """
         return bool(
             not left
             or not right
             or left[-1].isspace()
             or right[0] in _NO_SPACE_BEFORE
+            or _CLOSING_TAG_RE.match(right)
             or left[-1] in _NO_SPACE_AFTER
         )
 
-    def __repr__(self) -> str:
-        return "NeutralBoundaryProfile()"
+    # ── profile‑aware joining ────────────────────────────────────────────
+
+    def join_segments(self, segments: Sequence[str]) -> tuple[str, list[int]]:
+        """Join segments using neutral language rules.
+
+        No contraction attachment. Spaces are inserted except where
+        universal typography omits them.
+        """
+        joined = ""
+        boundary_offsets: list[int] = []
+        for segment in segments:
+            if not isinstance(segment, str):
+                raise ValueError("each segment must be text")
+            part = segment.strip()
+            if not part:
+                continue
+
+            if not joined:
+                joined = part
+            else:
+                boundary_offsets.append(len(joined) - 1)
+                if self.should_attach_without_space(joined, part):
+                    joined += part
+                else:
+                    joined += f" {part}"
+        return joined, boundary_offsets
+
+    # ── threshold recommendations ────────────────────────────────────────
+
+    def get_thresholds(self, gap_band: str) -> ProfileThresholds:
+        """Return conservative threshold recommendations for neutral languages.
+
+        These are deliberately conservative initial values that will later
+        be calibrated against the Spanish benchmark.
+
+        The neutral profile maintains an uncertainty interval between JOIN
+        and BREAK thresholds so that borderline probabilities produce
+        UNCERTAIN (safe BREAK) rather than an aggressive decision.
+
+        For ``normal`` gaps the uncertainty interval is the widest because
+        neutral languages have no lexical continuation or independence
+        evidence to assist the decision.
+        """
+        if gap_band == "normal":
+            # Very strong continuation evidence from SaT may still JOIN,
+            # but borderline probabilities near 0.50 become UNCERTAIN.
+            return ProfileThresholds(
+                join_max_probability=0.40,
+                break_min_probability=0.60,
+            )
+        if gap_band == "medium":
+            return ProfileThresholds(
+                join_max_probability=0.15,
+                break_min_probability=0.30,
+            )
+        # large gap
+        return ProfileThresholds(
+            join_max_probability=0.03,
+            break_min_probability=0.10,
+        )
 
 
 _NO_SPACE_BEFORE = frozenset(",.!?;:%)]}»”")
@@ -447,6 +568,66 @@ class EnglishBoundaryProfile:
             or left[-1] in _NO_SPACE_AFTER
         )
 
+    # ── profile‑aware joining ────────────────────────────────────────────
+
+    def join_segments(self, segments: Sequence[str]) -> tuple[str, list[int]]:
+        """Join segments using English language rules.
+
+        Preserves current English contraction attachment behaviour exactly.
+        """
+        joined = ""
+        boundary_offsets: list[int] = []
+        for segment in segments:
+            if not isinstance(segment, str):
+                raise ValueError("each segment must be text")
+            part = segment.strip()
+            if not part:
+                continue
+
+            contraction = self._LEADING_CONTRACTION_RE.match(part)
+            contraction_is_safe = (
+                contraction is not None and self.text_join_issue(joined, part) is None
+            )
+            if not joined:
+                joined = part
+            else:
+                boundary_offsets.append(len(joined) - 1)
+                if (
+                    joined[-1].isspace()
+                    or part[0] in _NO_SPACE_BEFORE
+                    or _CLOSING_TAG_RE.match(part)
+                    or joined[-1] in _NO_SPACE_AFTER
+                    or contraction_is_safe
+                ):
+                    joined += part
+                else:
+                    joined += f" {part}"
+        return joined, boundary_offsets
+
+    # ── threshold recommendations ────────────────────────────────────────
+
+    def get_thresholds(self, gap_band: str) -> ProfileThresholds:
+        """Return English threshold recommendations.
+
+        ``join_max_probability == break_min_probability`` so there is no
+        uncertainty interval — matches the current fixed-threshold policy.
+        """
+        if gap_band == "normal":
+            return ProfileThresholds(
+                join_max_probability=0.50,
+                break_min_probability=0.50,
+            )
+        if gap_band == "medium":
+            return ProfileThresholds(
+                join_max_probability=0.20,
+                break_min_probability=0.20,
+            )
+        # large gap
+        return ProfileThresholds(
+            join_max_probability=0.05,
+            break_min_probability=0.05,
+        )
+
     def __repr__(self) -> str:
         return "EnglishBoundaryProfile()"
 
@@ -485,3 +666,38 @@ def resolve_profile(language_code: str | None) -> BoundaryLanguageProfile:
 def normalise_speaker(name: str) -> str:
     """Return a comparison‑safe normalised speaker identity string."""
     return _normalise_speaker(name)
+
+
+def resolve_profile_with_metadata(
+    language_code: str | None,
+) -> tuple[BoundaryLanguageProfile, str, str, str]:
+    """Resolve a language tag to a profile and return full resolution metadata.
+
+    Returns ``(profile, requested_language, resolved_language, profile_code)``
+
+    * ``requested_language`` — the original input tag (or ``"en"`` default)
+    * ``resolved_language`` — the normalised base language code
+    * ``profile_code`` — BCP‑47 code of the selected profile (``"en"`` or ``"und"``)
+    """
+    requested = language_code or "en"
+    if not language_code:
+        return EnglishBoundaryProfile(), requested, "en", "en"
+
+    base = language_code.strip().lower().split("-")[0].split("_")[0]
+    base = unicodedata.normalize("NFC", base)
+
+    if base == "en":
+        return EnglishBoundaryProfile(), requested, "en", "en"
+    return NeutralBoundaryProfile(), requested, base, "und"
+
+
+def join_segments_for_profile(
+    segments: Sequence[str],
+    profile: BoundaryLanguageProfile,
+) -> tuple[str, list[int]]:
+    """Join segments using the given language profile's joining rules.
+
+    Returns ``(joined_text, boundary_offsets)`` with the same semantics as
+    ``BoundaryLanguageProfile.join_segments``.
+    """
+    return profile.join_segments(segments)

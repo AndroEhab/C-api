@@ -14,8 +14,10 @@ from .language_profile import (
     EnglishBoundaryProfile,
     resolve_profile,
     normalise_speaker,
+    join_segments_for_profile,
 )
-from .sat import SaTSentenceReconstructor, join_segments, text_join_issue
+from .sat import SaTSentenceReconstructor, join_segments
+
 
 
 def _normalise_speaker(name: str) -> str:
@@ -96,18 +98,19 @@ class BoundaryPolicyConfig:
 
 DEFAULT_BOUNDARY_POLICY_CONFIG = BoundaryPolicyConfig()
 _LOGGER = logging.getLogger(__name__)
-_STRONG_SENTENCE_END_RE = re.compile(r"""[.!?…]+(?:["'’”»)\]}]+)?$""")
+_STRONG_SENTENCE_END_RE = re.compile(r"""[.!?…؟？！]+(?:["'’”»)\]}]+)?$""")
 _DIALOGUE_DASH_RE = re.compile(r"^\s*(?:--?|[–—]|>>)\s+")
 _WORD_RE = re.compile(r"[A-Za-z]+(?:['''][A-Za-z]+)?")
 _CUE_ID_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<number>\d+)$")
 _VOICE_TAG_RE = re.compile(
-    r"^\s*(?:<v(?:\s+[^>]*)?>|\[[A-Z][A-Z0-9 ._-]{1,30}\]\s*|"
-    r"[A-Z][A-Z0-9 ._-]{1,30}:)"
+    r"^\s*(?:<v(?:\s+[^>]*)?>|"
+    r"\[[^\W\d_][^\W\d_0-9 ._-]{0,30}\]\s*|"
+    r"[A-Z\u00C0-\u024F][A-Z\u00C0-\u024F0-9 ._-]{1,30}:)"
 )
 _FORMATTING_TAG_RE = re.compile(r"</?[^>]+>|\{\\[^}]+\}")
 _VOICE_TAG_EXTRACT_RE = re.compile(r"^\s*<v\s+(\S[^>]*)>")
-_BRACKET_SPEAKER_RE = re.compile(r"^\s*\[([A-Z][A-Z0-9 ._-]{1,30})\]\s*")
-_LABEL_SPEAKER_RE = re.compile(r"^\s*([A-Z][A-Z0-9 ._-]{1,30}):(?:\s|$)")
+_BRACKET_SPEAKER_RE = re.compile(r"^\s*\[([^\W\d_][^\W\d_0-9 ._-]{0,30})\]\s*")
+_LABEL_SPEAKER_RE = re.compile(r"^\s*([A-Z\u00C0-\u024F][A-Z\u00C0-\u024F0-9 ._-]{1,30}):(?:\s|$)")
 
 def _visible_text(text: str) -> str:
     return _FORMATTING_TAG_RE.sub("", text).strip()
@@ -629,8 +632,8 @@ def _text_corruption_reason(
         return f"joining would corrupt text: {join_issue}"
 
     source_non_space = re.sub(r"\s+", "", left.text + right.text)
-    joined = join_segments([left.text, right.text])
-    if re.sub(r"\s+", "", joined) != source_non_space:
+    profile_joined, _ = join_segments_for_profile([left.text, right.text], profile=profile)
+    if re.sub(r"\s+", "", profile_joined) != source_non_space:
         return "joining would corrupt text: display join would lose or reorder source text"
     return None
 
@@ -730,12 +733,13 @@ def _soft_boundary_decision(
     if gap_band == "extreme":
         return "break", f"break for extreme cue gap {gap_ms}ms"
 
-    threshold = _model_join_threshold(gap_band, config)
-    if model_probability < threshold:
+    # Use profile‑recommended thresholds.
+    thresholds = profile.get_thresholds(gap_band)
+    if model_probability < thresholds.join_max_probability:
         return "join", "model probability favors continuation"
-    if model_probability > threshold:
+    if model_probability > thresholds.break_min_probability:
         return "break", "model probability favors a sentence boundary"
-    return "uncertain", "soft boundary evidence is exactly ambiguous"
+    return "uncertain", "model probability is in the uncertainty interval"
 
 class BoundaryScoringApi(Protocol):
     """Protocol for boundary probability scoring services.
@@ -903,6 +907,7 @@ class SubtitleSentenceReconstructor:
             )
 
         groups: list[list[str]] = [[ordered[0].segment_id]]
+        profile = self.language_profile
         for boundary_index, decision in enumerate(decisions):
             if not isinstance(decision, Mapping):
                 raise ValueError("boundary decisions must be objects")
@@ -926,7 +931,10 @@ class SubtitleSentenceReconstructor:
         by_id = {segment.segment_id: segment for segment in ordered}
         return [
             ReconstructedSentence(
-                text=join_segments([by_id[segment_id].text for segment_id in group]),
+                text=join_segments_for_profile(
+                    [by_id[segment_id].text for segment_id in group],
+                    profile=profile,
+                )[0],
                 start_ms=by_id[group[0]].start_ms,
                 end_ms=by_id[group[-1]].end_ms,
                 parts=_parts_for_group(group, by_id),

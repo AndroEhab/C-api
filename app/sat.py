@@ -6,6 +6,10 @@ import threading
 from dataclasses import dataclass
 from typing import Any, NotRequired, Protocol, Sequence, TypedDict
 
+from .language_profile import BoundaryLanguageProfile
+
+
+
 SAT_MODEL_NAME = "sat-3l-sm"
 _MAX_SEGMENT_LENGTH = 5000
 _NO_SPACE_BEFORE = frozenset(",.!?;:%)]}»”")
@@ -100,8 +104,18 @@ def text_join_issue(left: str, right: str) -> str | None:
 
 def _join_segments_with_boundary_offsets(
     segments: Sequence[str],
+    profile: BoundaryLanguageProfile | None = None,
 ) -> tuple[str, list[int]]:
-    """Join fragments and retain SaT's raw character boundary indexes."""
+    """Join fragments and retain SaT's raw character boundary indexes.
+
+    When *profile* is provided, delegates to its ``join_segments`` method
+    so that boundary offsets use language‑appropriate joining rules.
+    Otherwise uses the default English joining behaviour (backward compat).
+    """
+    if profile is not None:
+        return profile.join_segments(segments)
+
+    # Default English joining behaviour (backward compatible).
     joined = ""
     boundary_offsets: list[int] = []
     for segment in segments:
@@ -349,10 +363,12 @@ class SaTSentenceReconstructor:
         self,
         model: SaTModel | SaTProbabilityModel | None = None,
         model_name: str = SAT_MODEL_NAME,
+        profile: BoundaryLanguageProfile | None = None,
     ) -> None:
         self.model_name = model_name
         self._model = model
         self._load_lock = threading.Lock()
+        self.profile = profile
 
     @property
     def is_loaded(self) -> bool:
@@ -369,7 +385,7 @@ class SaTSentenceReconstructor:
         if len(segments) < 2:
             return []
 
-        joined_text, boundary_offsets = _join_segments_with_boundary_offsets(segments)
+        joined_text, boundary_offsets = _join_segments_with_boundary_offsets(segments, profile=self.profile)
         _validate_boundary_offsets(
             boundary_offsets,
             segment_count=len(segments),

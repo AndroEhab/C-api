@@ -67,6 +67,21 @@ class FakeGroupingApi:
         return self.groups
 
 
+@dataclass
+class ConstantProbabilityApi:
+    """Returns the same probability for every boundary."""
+    probability: float
+
+    def windowed_score_boundaries(self, segments: Sequence[str]) -> list[dict[str, float]]:
+        return [
+            {"boundaryProbability": self.probability}
+            for _ in range(max(0, len(segments) - 1))
+        ]
+
+    def score_boundaries(self, segments: Sequence[str]) -> list[dict[str, float]]:
+        return self.windowed_score_boundaries(segments)
+
+
 
 def segment(segment_id: str, text: str, start: int, end: int, speaker: str | None = None) -> SubtitleSegment:
     return SubtitleSegment(segment_id, text, start, end, speaker)
@@ -989,27 +1004,18 @@ def test_alice_and_bob_different_normalised() -> None:
     assert "different explicit speakers" in decisions[0]["reason"]
 
 
-def test_text_only_voice_tag_derives_speaker() -> None:
-    """Text-only '<v Alice>Hello' derives Alice as speaker when lines are absent."""
+def test_voice_tag_in_text_derives_speaker() -> None:
+    """Text-only '<v Alice>Hello' derives Alice and the voice marker."""
     from app.main import SubtitleSegmentRequest
     req = SubtitleSegmentRequest(
         segmentId="a",
-        text="Alice",
+        text="<v Alice>Hello",
         startMs=0,
         endMs=1000,
     )
-    # No lines, no rawText -> derives from text
-    assert req.speaker is None  # "Alice" alone is not a speaker marker pattern
-
-    # Voice tag in text should derive speaker
-    req2 = SubtitleSegmentRequest(
-        segmentId="b",
-        text="Hello",
-        startMs=0,
-        endMs=1000,
-    )
-    # Without voice tag pattern, no derivation
-    assert req2.speaker is None
+    assert req.speaker == "Alice"
+    assert "Alice" in req.speaker_markers
+    assert not req.contains_multiple_speakers
 
 
 def test_text_only_colon_label_derives_speaker() -> None:
@@ -1209,6 +1215,257 @@ def test_speaker_normalisation_function() -> None:
     assert _normalise_speaker("Café") == _normalise_speaker("Caf\u00e9")
 
 
+
+# ──── Task 6.1: Profile-aware joining tests ─────────────────────────────────
+
+def test_english_profile_joins_safe_contractions() -> None:
+    """EnglishBoundaryProfile joins safe contractions like 'm to 'I'."""
+    from app.language_profile import EnglishBoundaryProfile
+    profile = EnglishBoundaryProfile()
+    joined, offsets = profile.join_segments(["I", "'m ready."])
+    assert joined == "I'm ready."
+    assert len(offsets) == 1
+
+
+def test_english_profile_rejects_invalid_contractions() -> None:
+    """EnglishBoundaryProfile does not join invalid contractions like 'm to 'she'."""
+    from app.language_profile import EnglishBoundaryProfile
+    profile = EnglishBoundaryProfile()
+    joined, offsets = profile.join_segments(["She", "'m ready."])
+    assert joined == "She 'm ready."  # Space preserved -> not attached
+    assert len(offsets) == 1
+
+
+def test_neutral_profile_never_attaches_contractions() -> None:
+    """NeutralBoundaryProfile never attaches apostrophe-leading fragments."""
+    from app.language_profile import NeutralBoundaryProfile
+    profile = NeutralBoundaryProfile()
+    for contraction in ["'m", "'re", "'ve", "'ll", "'d", "'s"]:
+        joined, offsets = profile.join_segments(["I", f"{contraction} ready."])
+        assert f"I {contraction} ready." == joined, (
+            f"neutral profile attached {contraction!r}"
+        )
+
+
+def test_neutral_profile_preserves_punctuation_attachment() -> None:
+    """NeutralBoundaryProfile still attaches punctuation and closing tags."""
+    from app.language_profile import NeutralBoundaryProfile
+    profile = NeutralBoundaryProfile()
+    joined, offsets = profile.join_segments(["Hello", ", world", "!"])
+    assert joined == "Hello, world!"
+    assert len(offsets) == 2
+
+
+def test_neutral_profile_preserves_closing_tags() -> None:
+    """NeutralBoundaryProfile attaches closing formatting tags without space."""
+    from app.language_profile import NeutralBoundaryProfile
+    profile = NeutralBoundaryProfile()
+    joined, offsets = profile.join_segments(["Hello", "</i>"])
+    assert joined == "Hello</i>"
+
+
+def test_boundary_offsets_correct_under_both_profiles() -> None:
+    """Boundary offsets remain correct under both English and neutral profiles."""
+    from app.language_profile import EnglishBoundaryProfile, NeutralBoundaryProfile
+    eng = EnglishBoundaryProfile()
+    neutral = NeutralBoundaryProfile()
+    segments = ["Hello", "world.", "How", "are", "you?"]
+
+    eng_joined, eng_offsets = eng.join_segments(segments)
+    neutral_joined, neutral_offsets = neutral.join_segments(segments)
+
+    # Both should produce the same joined text for this non-contraction case
+    assert eng_joined == neutral_joined == "Hello world. How are you?"
+    assert eng_offsets == neutral_offsets
+    # Offsets are the character indexes of each boundary's last character
+    # in the joined text: "Hello world. How are you?"
+    #   "Hello" ends at 4  -> 'o'
+    #   "world." ends at 11 -> '.'
+    #   "How" ends at 15   -> 'w'
+    #   "are" ends at 19   -> 'e'
+    assert eng_offsets == [4, 11, 15, 19]
+
+
+def test_join_segments_for_profile_convenience_function() -> None:
+    """join_segments_for_profile uses the given profile's joining rules."""
+    from app.language_profile import join_segments_for_profile, EnglishBoundaryProfile
+    profile = EnglishBoundaryProfile()
+    joined, offsets = join_segments_for_profile(["I", "'m ready."], profile)
+    assert joined == "I'm ready."
+
+
+def test_canonical_reconstructed_text_uses_selected_profile() -> None:
+    """Reconstructed sentence text uses the language profile's joining."""
+    from app.language_profile import NeutralBoundaryProfile
+    from app.subtitles import SubtitleSentenceReconstructor, SubtitleSegment
+    from dataclasses import dataclass
+    from typing import Sequence
+
+    @dataclass
+    class _FakeBoundaryApi:
+        probability: float
+
+        def windowed_score_boundaries(self, segments: Sequence[str]) -> list[dict[str, float]]:
+            return [
+                {"boundaryProbability": self.probability}
+                for _ in range(max(0, len(segments) - 1))
+            ]
+
+    profile = NeutralBoundaryProfile()
+    reconstructor = SubtitleSentenceReconstructor(
+        _FakeBoundaryApi(0.4),
+        language_profile=profile,
+    )
+def test_borderline_probability_uncertain_under_neutral_profile() -> None:
+    """A borderline probability (0.45) becomes UNCERTAIN under neutral profile
+    but would JOIN under English profile's lower threshold."""
+    from app.language_profile import NeutralBoundaryProfile, EnglishBoundaryProfile
+    from app.subtitles import (
+        SubtitleSentenceReconstructor, SubtitleSegment,
+        BoundaryPolicyConfig, DEFAULT_BOUNDARY_POLICY_CONFIG,
+    )
+
+    # Use text fragments that don't trigger independent-statement detection:
+    # no terminal punctuation, no capitalisation-based independence.
+    segments = [
+        SubtitleSegment("a", "Hello there", 0, 500, None),
+        SubtitleSegment("b", "how are you", 600, 1000, None),
+    ]
+
+    # With neutral profile (join_max=0.40), probability 0.45 is in the
+    # uncertainty interval [0.40, 0.60] -> UNCERTAIN -> BREAK.
+    neutral_rec = SubtitleSentenceReconstructor(
+        ConstantProbabilityApi(0.45),
+        language_profile=NeutralBoundaryProfile(),
+    )
+    neutral_decisions = neutral_rec.evaluate_boundaries(segments)
+    assert neutral_decisions[0]["decision"] in ("uncertain", "break")
+
+    # With English profile (join_max=break_min=0.50), probability 0.45 < 0.50 -> JOIN.
+    eng_rec = SubtitleSentenceReconstructor(
+        ConstantProbabilityApi(0.45),
+        language_profile=EnglishBoundaryProfile(),
+    )
+    eng_decisions = eng_rec.evaluate_boundaries(segments)
+    assert eng_decisions[0]["decision"] == "join"
+
+
+def test_strong_probability_still_joins_under_neutral() -> None:
+    """Very strong continuation probability still JOINs under neutral profile."""
+    from app.language_profile import NeutralBoundaryProfile
+    from app.subtitles import SubtitleSentenceReconstructor, SubtitleSegment
+    segments = [
+        SubtitleSegment("a", "Hello there.", 0, 500, None),
+        SubtitleSegment("b", "How are you?", 600, 1000, None),
+    ]
+    rec = SubtitleSentenceReconstructor(
+        ConstantProbabilityApi(0.1),
+        language_profile=NeutralBoundaryProfile(),
+    )
+    decisions = rec.evaluate_boundaries(segments)
+    assert decisions[0]["decision"] == "join"
+
+
+# ──── Unicode speaker extraction tests ───────────────────────────────────────
+
+def test_unicode_colon_label_extracts_speaker() -> None:
+    """ÁNGELA: Hola extracts 'ÁNGELA' as speaker with Unicode chars."""
+    from app.subtitles import _extract_speaker_from_line
+    result = _extract_speaker_from_line("ÁNGELA: Hola.")
+    assert result == "ÁNGELA"
+
+
+def test_unicode_bracket_label_extracts_speaker() -> None:
+    """[ÁNGELA] Hola extracts 'ÁNGELA' as speaker."""
+    from app.subtitles import _extract_speaker_from_line
+    result = _extract_speaker_from_line("[ÁNGELA] Hola.")
+    assert result == "ÁNGELA"
+
+
+def test_arabic_bracket_label_extracts_speaker() -> None:
+    """[ليلى] مرحباً extracts the Arabic name."""
+    from app.subtitles import _extract_speaker_from_line
+    result = _extract_speaker_from_line("[ليلى] مرحباً.")
+    assert result is not None
+    # Should preserve original spelling
+    assert "ليلى" in result
+
+
+def test_arabic_voice_tag_extracts_speaker() -> None:
+    """<v ليلى>مرحباً extracts the Arabic name from voice tag."""
+    from app.subtitles import _extract_speaker_from_line
+    result = _extract_speaker_from_line("<v ليلى>مرحباً.")
+    assert result is not None
+    assert "ليلى" in result
+
+
+def test_cedilla_label_extracts_speaker() -> None:
+    """ÇAĞLA: Merhaba extracts ÇAĞLA as speaker."""
+    from app.subtitles import _extract_speaker_from_line
+    result = _extract_speaker_from_line("ÇAĞLA: Merhaba.")
+    assert result == "ÇAĞLA"
+
+
+def test_normal_colon_not_false_positive_speaker() -> None:
+    """Ordinary sentence with colon does not become speaker label."""
+    from app.subtitles import _extract_speaker_from_line
+    result = _extract_speaker_from_line("Note: This is a note.")
+    assert result is None
+
+
+def test_arabic_question_mark_recognised() -> None:
+    """Arabic question mark ؟ is treated as terminal punctuation."""
+    from app.language_profile import ends_strong_sentence
+    assert ends_strong_sentence("كيف حالك؟")
+
+
+def test_fullwidth_question_mark_recognised() -> None:
+    """Full-width question mark ？ is treated as terminal punctuation."""
+    from app.language_profile import ends_strong_sentence
+    assert ends_strong_sentence("How are you？")
+
+
+def test_fullwidth_exclamation_recognised() -> None:
+    """Full-width exclamation mark ！ is treated as terminal punctuation."""
+    from app.language_profile import ends_strong_sentence
+    assert ends_strong_sentence("Hello！")
+
+
+# ──── Field comparison normalization tests ───────────────────────────────────
+
+def test_speaker_case_difference_not_rejected() -> None:
+    """Client speaker 'Alice' with rawText 'ALICE: Hello' is not rejected."""
+    from app.main import SubtitleSegmentRequest
+    req = SubtitleSegmentRequest(
+        segmentId="a",
+        text="ALICE: Hello",
+        startMs=0,
+        endMs=1000,
+        speaker="Alice",
+        rawText="ALICE: Hello",
+        lines=["ALICE: Hello"],
+    )
+    # Should not raise — normalised comparison matches.
+    assert req.speaker is not None
+    # The originally supplied spelling is preserved in the response.
+    assert req.speaker == "Alice"  # client's spelling kept
+
+
+def test_contradictory_speaker_still_rejected() -> None:
+    """Client speaker 'Bob' with rawText 'ALICE: Hello' is still rejected."""
+    from app.main import SubtitleSegmentRequest
+    import pytest
+    with pytest.raises(ValueError, match="contradicts"):
+        SubtitleSegmentRequest(
+            segmentId="a",
+            text="ALICE: Hello",
+            startMs=0,
+            endMs=1000,
+            speaker="Bob",
+            rawText="ALICE: Hello",
+            lines=["ALICE: Hello"],
+        )
+
 def test_reconstruct_endpoint_preserves_all_structural_fields() -> None:
     """Real POST to /reconstruct-subtitles preserves rawText, lines, speaker, etc."""
     from fastapi.testclient import TestClient
@@ -1254,3 +1511,95 @@ def test_reconstruct_endpoint_preserves_all_structural_fields() -> None:
     assert "diagnostics" in body
     assert body["diagnostics"]["resolvedLanguage"] == "en"
     assert body["diagnostics"]["profile"] == "EnglishBoundaryProfile"
+
+
+def test_spanish_endpoint_uses_neutral_profile() -> None:
+    """es-ES language tag resolves to NeutralBoundaryProfile in diagnostics."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    payload = {
+        "language": "es-ES",
+        "segments": [
+            {
+                "segmentId": "a",
+                "text": "Hola.",
+                "startMs": 0,
+                "endMs": 1000,
+            },
+            {
+                "segmentId": "b",
+                "text": "¿Cómo estás?",
+                "startMs": 1500,
+                "endMs": 2500,
+            },
+        ]
+    }
+    response = client.post("/reconstruct-subtitles", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["diagnostics"]["requestedLanguage"] == "es-ES"
+    assert body["diagnostics"]["resolvedLanguage"] == "es"
+    assert body["diagnostics"]["profile"] == "NeutralBoundaryProfile"
+    assert body["diagnostics"]["profileCode"] == "und"
+
+
+def test_no_language_defaults_to_english_diagnostics() -> None:
+    """Request without language uses English defaults in diagnostics."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    payload = {
+        "segments": [
+            {
+                "segmentId": "a",
+                "text": "Hello.",
+                "startMs": 0,
+                "endMs": 1000,
+            },
+            {
+                "segmentId": "b",
+                "text": "World.",
+                "startMs": 1500,
+                "endMs": 2500,
+            },
+        ]
+    }
+    response = client.post("/reconstruct-subtitles", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["diagnostics"]["requestedLanguage"] == "en"
+    assert body["diagnostics"]["resolvedLanguage"] == "en"
+    assert body["diagnostics"]["profile"] == "EnglishBoundaryProfile"
+    assert body["diagnostics"]["profileCode"] == "en"
+
+
+def test_arabic_diagnostics_report_neutral_profile() -> None:
+    """Arabic language tag reports resolvedLanguage 'ar' and NeutralBoundaryProfile."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    payload = {
+        "language": "ar",
+        "segments": [
+            {
+                "segmentId": "a",
+                "text": "مرحباً.",
+                "startMs": 0,
+                "endMs": 1000,
+            },
+            {
+                "segmentId": "b",
+                "text": "كيف حالك؟",
+                "startMs": 1500,
+                "endMs": 2500,
+            },
+        ]
+    }
+    response = client.post("/reconstruct-subtitles", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["diagnostics"]["requestedLanguage"] == "ar"
+    assert body["diagnostics"]["resolvedLanguage"] == "ar"
+    assert body["diagnostics"]["profile"] == "NeutralBoundaryProfile"
+    assert body["diagnostics"]["profileCode"] == "und"
