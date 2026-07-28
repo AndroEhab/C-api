@@ -1,0 +1,108 @@
+{
+  "datasetReport": {
+    "reportVersion": "1.0",
+    "created": "2026-07-28"
+  },
+  "sourceProvenance": [
+    {
+      "sourceId": "ted_tales_es",
+      "contentType": "talk",
+      "originalSpokenLanguage": "es",
+      "spanishVariant": "es-CL",
+      "translationType": "original",
+      "candidatesInBenchmark": 55
+    },
+    {
+      "sourceId": "ted_creativity_es",
+      "contentType": "talk",
+      "originalSpokenLanguage": "en",
+      "spanishVariant": "unknown",
+      "translationType": "professional-human",
+      "candidatesInBenchmark": 140
+    },
+    {
+      "sourceId": "the_goat_life_es",
+      "contentType": "film",
+      "originalSpokenLanguage": "ml",
+      "spanishVariant": "unknown",
+      "translationType": "unknown",
+      "candidatesInBenchmark": 55
+    }
+  ],
+  "overview": {
+    "totalCandidates": 250,
+    "totalSources": 3,
+    "devCount": 177,
+    "testCount": 73,
+    "devRatio": 0.708,
+    "unreviewed": 250,
+    "multilineCues": 124,
+    "multilineLeft": 78,
+    "multilineRight": 87,
+    "multipleSpeakerCues": 14,
+    "chainCount": 17
+  },
+  "candidatesPerSource": {
+    "ted_creativity_es": 140,
+    "ted_tales_es": 55,
+    "the_goat_life_es": 55
+  },
+  "candidatesPerRegion": {
+    "unknown": 195,
+    "es-CL": 55
+  },
+  "candidatesPerContentType": {
+    "talk": 195,
+    "film": 55
+  },
+  "samplingTagCounts": {
+    "independent_utterance": 94,
+    "join_like": 84,
+    "inverted_question": 17,
+    "misleading_period": 16,
+    "caption": 16,
+    "dialogue_dash": 13,
+    "unknown_speaker_turn": 13,
+    "ellipsis_or_interruption": 9,
+    "inverted_exclamation": 9,
+    "short_response": 8
+  },
+  "timingBandCounts": {
+    "0-100ms": 149,
+    "501-1500ms": 47,
+    "1501-3000ms": 19,
+    "3000+ms": 14,
+    "301-500ms": 12,
+    "101-300ms": 9
+  },
+  "devTestCoverage": {
+    "devCount": 177,
+    "testCount": 73,
+    "devTagCoverage": {
+      "independent_utterance": 64,
+      "join_like": 64,
+      "inverted_question": 12,
+      "misleading_period": 12,
+      "caption": 12,
+      "dialogue_dash": 9,
+      "unknown_speaker_turn": 9,
+      "inverted_exclamation": 7,
+      "ellipsis_or_interruption": 6,
+      "short_response": 2
+    },
+    "testTagCoverage": {
+      "independent_utterance": 30,
+      "join_like": 20,
+      "short_response": 6,
+      "inverted_question": 5,
+      "caption": 4,
+      "misleading_period": 4,
+      "dialogue_dash": 4,
+      "unknown_speaker_turn": 4,
+      "ellipsis_or_interruption": 3,
+      "inverted_exclamation": 2
+    }
+  },
+  "minimumRequirementsMet": false,
+  "minimumRequirementsNotes": "NO dialogue-heavy source originally spoken in Spanish from Spain exists. NO dialogue-heavy source originally spoken in Spanish from Latin America exists. The only originally-Spanish source (ted_tales_es) is a TED monologue. The only dialogue-heavy source (the_goat_life_es) is translated from Malayalam. Additional Spanish-original dialogue-heavy sources required before labeling."
+}
