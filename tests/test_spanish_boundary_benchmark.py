@@ -6,9 +6,11 @@ Tests requiring source files are marked with a skip when sources are absent.
 
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from collections import Counter
@@ -40,6 +42,7 @@ from benchmarks.spanish_benchmark_lib import (  # type: ignore[import-not-found]
     load_policy_freeze,
     validate_policy_freeze,
     require_policy_freeze_for_test_evaluation,
+    is_valid_frozen_policy,
 )
 
 SOURCES_PRESENT = SOURCE_DIR.is_dir() and any(SOURCE_DIR.rglob("*.srt"))
@@ -1942,27 +1945,37 @@ class TestCSVImport:
         # Should fail because file doesn't exist
         assert result.returncode != 0
 
-    def test_record_script_validates_before_write(self):
+    def test_record_script_validates_before_write(self, tmp_path):
         """Invalid CSV rows must be rejected before any ledger write."""
-        import tempfile
-        import os
-        fd, csv_path = tempfile.mkstemp(suffix=".csv", prefix="test_queue_")
-        with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
+        import json
+        import subprocess
+        csv_path = tmp_path / "test_queue.csv"
+        manifest_path = csv_path.with_suffix(".manifest.json")
+
+        with open(csv_path, "w", encoding="utf-8-sig") as f:
             f.write("sourceId,leftCueId,rightCueId,goldLabel,labelConfidence,reviewReason\n")
             f.write("unknown,1,2,JOIN,high,test\n")
 
-        try:
-            import subprocess
-            result = subprocess.run(
-                [sys.executable, "-m", "benchmarks.record_spanish_reviews",
-                 "--input", csv_path,
-                 "--reviewer", "test", "--round", "1"],
-                capture_output=True, text=True, cwd=PROJECT_ROOT,
-            )
-            assert result.returncode != 0
-            assert "not a valid candidate" in result.stderr
-        finally:
-            os.unlink(csv_path)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "queueId": "test_queue",
+                "reviewerId": "test",
+                "reviewRound": 1,
+                "split": "dev",
+                "createdAt": "2026-07-28T10:00:00Z",
+                "boundaryIds": [],
+                "rowCount": 1,
+                "contentSha256": "",
+            }, f)
+
+        result = subprocess.run(
+            [sys.executable, "-m", "benchmarks.record_spanish_reviews",
+             "--input", str(csv_path),
+             "--reviewer", "test", "--round", "1"],
+            capture_output=True, text=True, cwd=PROJECT_ROOT,
+        )
+        assert result.returncode != 0
+        assert "not in queue" in result.stderr or "not a valid candidate" in result.stderr
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2165,3 +2178,759 @@ class TestMaturityDevTestThresholds:
             f"Expected validated despite AMBIGUOUS entries, "
             f"got {maturity['maturityLevel']}"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 25. CSV generation unit tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCSVGeneration:
+    """Direct unit tests for _generate_review_csv using temporary files."""
+
+    def _make_entry(self, **overrides) -> dict:
+        entry = {
+            "sourceId": "test_source",
+            "sourceChecksum": "a" * 16,
+            "leftCueId": "1",
+            "rightCueId": "2",
+            "leftRawText": "Hello world",
+            "rightRawText": "Goodbye world",
+            "leftNormalized": "Hello world",
+            "rightNormalized": "Goodbye world",
+            "leftLines": ["Hello world"],
+            "rightLines": ["Goodbye world"],
+            "leftStartMs": 1000,
+            "leftEndMs": 2000,
+            "rightStartMs": 2000,
+            "rightEndMs": 3000,
+            "gapMs": 0,
+            "overlapMs": 0,
+            "previousContext": [],
+            "nextContext": [],
+            "speakerMarkers": {},
+            "samplingTags": ["independent_utterance"],
+            "structureTags": [],
+            "punctuationTags": [],
+            "linguisticTags": [],
+            "timingBand": "0-100ms",
+            "chainId": None,
+            "sceneId": None,
+            "split": "dev",
+            "goldLabel": None,
+            "labelConfidence": None,
+            "reviewerCount": 0,
+            "needsSecondReview": False,
+            "reviewReason": "",
+            "reviewStatus": "unreviewed",
+            "labelOrigin": None,
+        }
+        entry.update(overrides)
+        return entry
+
+    def _run_generate_review_csv(self, entries, tmp_path):
+        """Run _generate_review_csv with the given entries and return the CSV rows."""
+        csv_path = tmp_path / "test_review.csv"
+        from benchmarks.build_spanish_boundary_candidates import _generate_review_csv
+        _generate_review_csv(entries, csv_path)
+        with open(csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            return list(reader)
+
+    def test_one_entry_one_data_row(self, tmp_path):
+        """One input entry creates exactly one CSV data row."""
+        rows = self._run_generate_review_csv([self._make_entry()], tmp_path)
+        assert len(rows) == 1, f"Expected 1 row, got {len(rows)}"
+
+    def test_250_entries_250_rows(self, tmp_path):
+        """250 input entries create exactly 250 CSV data rows."""
+        entries = [self._make_entry(**{"leftCueId": str(i), "rightCueId": str(i + 1)}) for i in range(250)]
+        rows = self._run_generate_review_csv(entries, tmp_path)
+        assert len(rows) == 250, f"Expected 250 rows, got {len(rows)}"
+
+    def test_unicode_survives(self, tmp_path):
+        """Unicode text survives CSV round-trip."""
+        entry = self._make_entry(
+            leftRawText="¿Qué tal? ¡Muy bien! ñoño año",
+            rightRawText="café, corazón, 🎵 música española",
+        )
+        rows = self._run_generate_review_csv([entry], tmp_path)
+        assert len(rows) == 1
+        assert "¿Qué tal?" in rows[0]["leftRawText"]
+        assert "🎵" in rows[0]["rightRawText"]
+
+    def test_multiline_text_survives(self, tmp_path):
+        """Multiline text (with newlines) survives CSV round-trip."""
+        entry = self._make_entry(
+            leftRawText="Line one\nLine two\nLine three",
+            leftLines=["Line one", "Line two", "Line three"],
+            rightRawText="Response\non two lines",
+            rightLines=["Response", "on two lines"],
+        )
+        rows = self._run_generate_review_csv([entry], tmp_path)
+        assert len(rows) == 1
+        # Raw text may have JSON-escaped newlines in CSV
+        assert "Line one" in rows[0]["leftRawText"]
+
+    def test_boundary_fields_present(self, tmp_path):
+        """CSV contains boundary and review field names."""
+        rows = self._run_generate_review_csv([self._make_entry()], tmp_path)
+        assert len(rows) == 1
+        row = rows[0]
+        assert "sourceId" in row
+        assert "leftCueId" in row
+        assert "rightCueId" in row
+        assert "goldLabel" in row
+        assert "labelConfidence" in row
+        assert "reviewReason" in row
+        assert "leftRawText" in row
+        assert "rightRawText" in row
+        assert "gapMs" in row
+        assert "samplingTags" in row
+
+    def test_review_fields_empty(self, tmp_path):
+        """Review fields are empty in generated CSV for labeling."""
+        rows = self._run_generate_review_csv([self._make_entry()], tmp_path)
+        row = rows[0]
+        assert row["goldLabel"] == ""
+        assert row["labelConfidence"] == ""
+        assert row["reviewReason"] == ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 26. Queue CSV and manifest tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestQueueCSVAndManifest:
+    """Queue CSV fields and manifest hash integrity."""
+
+    def test_csv_includes_boundary_id(self, tmp_path):
+        """Queue CSV includes boundaryId column."""
+        from benchmarks.prepare_spanish_review_queue import _write_queue_csv
+        entry = {
+            "sourceId": "src_a",
+            "leftCueId": "1",
+            "rightCueId": "2",
+            "leftRawText": "Left text",
+            "rightRawText": "Right text",
+            "leftNormalized": "Left text",
+            "rightNormalized": "Right text",
+            "leftLines": ["Left text"],
+            "rightLines": ["Right text"],
+            "leftStartMs": 1000,
+            "leftEndMs": 2000,
+            "rightStartMs": 2000,
+            "rightEndMs": 3000,
+            "gapMs": 0,
+            "overlapMs": 0,
+            "previousContext": [],
+            "nextContext": [],
+            "speakerMarkers": {},
+            "samplingTags": ["independent_utterance"],
+            "structureTags": [],
+            "punctuationTags": [],
+            "linguisticTags": [],
+            "timingBand": "0-100ms",
+            "chainId": None,
+            "sceneId": "scene_1",
+            "split": "dev",
+            "goldLabel": None,
+            "labelConfidence": None,
+            "reviewerCount": 0,
+            "needsSecondReview": False,
+            "reviewReason": "",
+            "reviewStatus": "unreviewed",
+            "labelOrigin": None,
+        }
+        csv_path = tmp_path / "test_queue.csv"
+        _write_queue_csv([entry], {}, csv_path, round_num=1,
+                         queue_id="dev_r1_reviewer-a", reviewer="reviewer-a", split="dev")
+        with open(csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        assert len(rows) == 1
+        assert "boundaryId" in rows[0]
+        assert rows[0]["boundaryId"] == "src_a:1:2"
+        assert "queueId" in rows[0]
+        assert rows[0]["queueId"] == "dev_r1_reviewer-a"
+
+    def test_manifest_hash_detects_modifications(self, tmp_path):
+        """Manifest content hash changes when immutable content is modified."""
+        from benchmarks.prepare_spanish_review_queue import _compute_queue_content_hash
+        entries = [
+            {"sourceId": "src_a", "leftCueId": "1", "rightCueId": "2",
+             "leftRawText": "Original text", "split": "dev",
+             "samplingTags": ["indep"], "timingBand": "0-100ms",
+             "chainId": None, "sceneId": "s1"},
+            {"sourceId": "src_a", "leftCueId": "2", "rightCueId": "3",
+             "leftRawText": "More text", "split": "dev",
+             "samplingTags": ["join"], "timingBand": "101-300ms",
+             "chainId": None, "sceneId": "s1"},
+        ]
+        original_hash = _compute_queue_content_hash(entries)
+
+        # Modify immutable content
+        modified_entries = [dict(entries[0], leftRawText="Changed text"), entries[1]]
+        modified_hash = _compute_queue_content_hash(modified_entries)
+        assert original_hash != modified_hash, "Hash should differ when content changes"
+
+        # Modify mutable review field should NOT change hash
+        review_modified = [dict(e, goldLabel="BREAK") for e in entries]
+        review_hash = _compute_queue_content_hash(review_modified)
+        assert original_hash == review_hash, "Hash should be same when only review fields change"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 27. Queue import validation tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestQueueImportValidation:
+    """Validation of queue imports in record_spanish_reviews."""
+
+    def _sample_queue_manifest(self, **overrides) -> dict:
+        manifest = {
+            "queueId": "dev_r1_reviewer-a",
+            "reviewerId": "reviewer-a",
+            "reviewRound": 1,
+            "split": "dev",
+            "createdAt": "2026-07-28T10:00:00Z",
+            "boundaryIds": ["src_a:1:2", "src_a:2:3"],
+            "rowCount": 2,
+            "contentSha256": "",
+        }
+        manifest.update(overrides)
+        return manifest
+
+    def _write_test_fixture(self, path):
+        """Write a minimal valid fixture."""
+        import json
+        fixture = [
+            {"sourceId": "src_a", "leftCueId": "1", "rightCueId": "2"},
+            {"sourceId": "src_a", "leftCueId": "2", "rightCueId": "3"},
+            {"sourceId": "src_b", "leftCueId": "1", "rightCueId": "2"},
+            {"sourceId": "src_b", "leftCueId": "2", "rightCueId": "3"},
+        ]
+        with open(path, "w") as f:
+            json.dump(fixture, f)
+
+    def _setup_import_test(self, tmp_path, manifest_overrides=None, csv_rows=None):
+        """Helper to set up a test environment for record_reviews."""
+        import json
+        csv_path = tmp_path / "test_queue.csv"
+        manifest_path = csv_path.with_suffix(".manifest.json")
+        test_ledger = tmp_path / "test_ledger.jsonl"
+        test_ledger.write_text("")
+        test_fixture = tmp_path / "test_fixture.json"
+
+        if csv_rows is None:
+            csv_rows = [["src_a", "1", "2", "BREAK", "high", "Test reason"]]
+
+        # Auto-set rowCount to match csv_rows length
+        base_overrides = {"rowCount": len(csv_rows), "boundaryIds": [f"src_a:{r[1]}:{r[2]}" for r in csv_rows]}
+        merged_overrides = dict(base_overrides)
+        merged_overrides.update(manifest_overrides or {})
+
+        manifest = self._sample_queue_manifest(**merged_overrides)
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f)
+
+        with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["sourceId", "leftCueId", "rightCueId",
+                             "goldLabel", "labelConfidence", "reviewReason"])
+            for row in csv_rows:
+                writer.writerow(row)
+
+        self._write_test_fixture(test_fixture)
+
+        import benchmarks.record_spanish_reviews as rec_mod
+        rec_mod.LEDGER_PATH = test_ledger
+        rec_mod.FIXTURE_PATH = test_fixture
+
+        return csv_path, test_ledger, rec_mod
+
+    def test_wrong_reviewer_rejected(self, tmp_path):
+        """Wrong reviewer ID is rejected."""
+        import argparse
+        from benchmarks.record_spanish_reviews import record_reviews
+
+        csv_path, _, rec_mod = self._setup_import_test(
+            tmp_path, manifest_overrides={"reviewerId": "reviewer-b"}
+        )
+        args = argparse.Namespace(
+            input=csv_path, reviewer="reviewer-a", round=1, adjudicate=False,
+        )
+        with pytest.raises(SystemExit):
+            record_reviews(args)
+
+    def test_wrong_round_rejected(self, tmp_path):
+        """Wrong review round is rejected."""
+        import argparse
+        csv_path, _, rec_mod = self._setup_import_test(
+            tmp_path, manifest_overrides={"reviewRound": 2}
+        )
+        args = argparse.Namespace(input=csv_path, reviewer="reviewer-a", round=1, adjudicate=False)
+        with pytest.raises(SystemExit):
+            rec_mod.record_reviews(args)
+
+    def test_wrong_split_rejected(self, tmp_path):
+        """Wrong split is rejected."""
+        import argparse
+        import json
+        csv_path = tmp_path / "test_queue.csv"
+        manifest_path = csv_path.with_suffix(".manifest.json")
+        test_ledger = tmp_path / "test_ledger.jsonl"
+        test_ledger.write_text("")
+        test_fixture = tmp_path / "test_fixture.json"
+        self._write_test_fixture(test_fixture)
+
+        # Manifest says split=test
+        with open(manifest_path, "w") as f:
+            json.dump({
+                "queueId": "dev_r1_reviewer-a",
+                "reviewerId": "reviewer-a",
+                "reviewRound": 1,
+                "split": "test",
+                "createdAt": "2026-07-28T10:00:00Z",
+                "boundaryIds": ["src_a:1:2"],
+                "rowCount": 1,
+                "contentSha256": "",
+            }, f)
+
+        # CSV row says queueSplit=dev (mismatch with manifest split=test)
+        with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["sourceId", "leftCueId", "rightCueId",
+                             "goldLabel", "labelConfidence", "reviewReason",
+                             "queueSplit"])
+            writer.writerow(["src_a", "1", "2", "BREAK", "high", "Test reason", "dev"])
+
+        import benchmarks.record_spanish_reviews as rec_mod
+        rec_mod.LEDGER_PATH = test_ledger
+        rec_mod.FIXTURE_PATH = test_fixture
+
+        args = argparse.Namespace(input=csv_path, reviewer="reviewer-a", round=1, adjudicate=False)
+        with pytest.raises(SystemExit):
+            rec_mod.record_reviews(args)
+
+    def test_boundary_outside_queue_rejected(self, tmp_path):
+        """Valid boundary not in the queue manifest is rejected."""
+        import argparse
+        csv_path, _, rec_mod = self._setup_import_test(
+            tmp_path,
+            manifest_overrides={"boundaryIds": ["src_a:1:2"]},
+            csv_rows=[["src_b", "1", "2", "BREAK", "high", "Test reason"]],
+        )
+        args = argparse.Namespace(input=csv_path, reviewer="reviewer-a", round=1, adjudicate=False)
+        with pytest.raises(SystemExit):
+            rec_mod.record_reviews(args)
+
+    def test_successful_import_appends_events(self, tmp_path):
+        """Successful import appends events to the ledger."""
+        import argparse
+        csv_path, test_ledger, rec_mod = self._setup_import_test(tmp_path)
+        args = argparse.Namespace(input=csv_path, reviewer="reviewer-a", round=1, adjudicate=False)
+
+        rec_mod.record_reviews(args)
+        events = rec_mod.load_ledger(test_ledger)
+        assert len(events) == 1, f"Expected 1 event, got {len(events)}"
+        assert events[0]["boundaryId"] == "src_a:1:2"
+        assert events[0]["label"] == "BREAK"
+        assert events[0]["reviewerId"] == "reviewer-a"
+
+    def test_existing_events_remain_byte_for_byte(self, tmp_path):
+        """Existing ledger events remain byte-for-byte present after import."""
+        import argparse, json
+        csv_path, test_ledger, rec_mod = self._setup_import_test(tmp_path)
+
+        # Write an existing event to the ledger BEFORE the import
+        existing = {"eventType": "review", "boundaryId": "src_a:2:3",
+                     "reviewId": "existing-001", "reviewerId": "reviewer-b",
+                     "reviewRound": 1, "label": "JOIN", "confidence": "high",
+                     "reason": "Existing", "createdAt": "2026-07-28T09:00:00Z",
+                     "labelOrigin": "human"}
+        with open(test_ledger, "w", encoding="utf-8") as f:
+            f.write(json.dumps(existing) + "\n")
+
+        args = argparse.Namespace(input=csv_path, reviewer="reviewer-a", round=1, adjudicate=False)
+        rec_mod.record_reviews(args)
+
+        # Read back the ledger - existing event must be present and unchanged
+        with open(test_ledger, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        assert len(lines) == 2, f"Expected 2 lines, got {len(lines)}"
+        first_line = json.loads(lines[0])
+        assert first_line["reviewId"] == "existing-001"
+        assert first_line["label"] == "JOIN"
+
+    def test_failed_import_appends_nothing(self, tmp_path):
+        """Failed multi-row import appends no events to the ledger."""
+        import argparse
+        csv_path, test_ledger, rec_mod = self._setup_import_test(
+            tmp_path,
+            manifest_overrides={"boundaryIds": ["src_a:1:2", "src_a:2:3"]},
+            csv_rows=[
+                ["src_a", "1", "2", "BREAK", "high", "Good reason"],
+                ["src_a", "2", "3", "INVALID", "high", "Bad reason"],
+            ],
+        )
+        args = argparse.Namespace(input=csv_path, reviewer="reviewer-a", round=1, adjudicate=False)
+
+        with pytest.raises(SystemExit):
+            rec_mod.record_reviews(args)
+
+        # Verify nothing was appended
+        events = rec_mod.load_ledger(test_ledger)
+        assert len(events) == 0, f"Expected 0 events after failed import, got {len(events)}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 28. Round two boundary selection tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestRoundTwoSelection:
+    """Round two boundary selection rules."""
+
+    def test_deterministic_boundary_ids(self):
+        """Round two selects deterministic boundary IDs for same inputs."""
+        from benchmarks.prepare_spanish_review_queue import _prepare_round2
+
+        all_entries = [
+            {"sourceId": "src_a", "leftCueId": "1", "rightCueId": "2",
+             "split": "dev", "samplingTags": ["independent_utterance"],
+             "timingBand": "0-100ms", "contentStructure": "dialogue",
+             "chainId": None, "sceneId": "s1"},
+            {"sourceId": "src_a", "leftCueId": "2", "rightCueId": "3",
+             "split": "dev", "samplingTags": ["join_like"],
+             "timingBand": "101-300ms", "contentStructure": "dialogue",
+             "chainId": None, "sceneId": "s1"},
+            {"sourceId": "src_b", "leftCueId": "1", "rightCueId": "2",
+             "split": "test", "samplingTags": ["independent_utterance"],
+             "timingBand": "0-100ms", "contentStructure": "monologue",
+             "chainId": None, "sceneId": "s2"},
+        ]
+        events = [
+            {"eventType": "review", "boundaryId": "src_a:1:2",
+             "reviewerId": "reviewer-a", "reviewRound": 1,
+             "label": "JOIN", "confidence": "medium",
+             "createdAt": "2026-07-28T10:00:00Z", "labelOrigin": "human",
+             "reviewId": "r1", "reason": "Test"},
+            {"eventType": "review", "boundaryId": "src_a:2:3",
+             "reviewerId": "reviewer-a", "reviewRound": 1,
+             "label": "BREAK", "confidence": "high",
+             "createdAt": "2026-07-28T10:00:00Z", "labelOrigin": "human",
+             "reviewId": "r2", "reason": "Test"},
+        ]
+        split_entries = [e for e in all_entries if e.get("split") == "dev"]
+        queue = _prepare_round2(
+            all_entries, split_entries, {},
+            events, set(), "reviewer-b", "dev", limit=None, batch_index=0,
+        )
+        # reviewer-b should be eligible for boundaries reviewed by reviewer-a
+        # src_a:1:2 is JOIN+medium, so high priority for round-two
+        ids = set(e["leftCueId"] + ":" + e["rightCueId"] for e in queue)
+        assert "1:2" in ids, "Expected src_a:1:2 to be eligible for round-two by reviewer-b"
+
+    def test_round_two_no_unreviewed(self):
+        """Round two never contains an unreviewed boundary."""
+        from benchmarks.prepare_spanish_review_queue import _prepare_round2
+
+        all_entries = [
+            {"sourceId": "src_a", "leftCueId": "1", "rightCueId": "2",
+             "split": "dev", "samplingTags": ["independent_utterance"],
+             "timingBand": "0-100ms", "contentStructure": "dialogue",
+             "chainId": None, "sceneId": "s1"},
+        ]
+        # No events at all - boundary is unreviewed
+        queue = _prepare_round2(
+            all_entries, all_entries, {},
+            [], set(), "reviewer-a", "dev", limit=None, batch_index=0,
+        )
+        assert len(queue) == 0, "Round two must be empty when no boundaries are reviewed"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 29. Policy freeze validation tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestPolicyFreezeValidation:
+    """Policy freeze validation rules."""
+
+    def test_valid_frozen_policy(self):
+        """A properly frozen policy returns true."""
+        freeze = {"frozen": True, "commitSha": "a" * 40,
+                   "frozenAt": "2026-07-28T12:00:00Z", "notes": ""}
+        assert is_valid_frozen_policy(freeze)
+
+    def test_unfrozen_not_valid(self):
+        """An unfrozen policy returns false."""
+        freeze = {"frozen": False, "commitSha": None, "frozenAt": None}
+        assert not is_valid_frozen_policy(freeze)
+
+    def test_malformed_sha_blocked(self):
+        """A malformed SHA blocks isFrozen=True."""
+        freeze = {"frozen": True, "commitSha": "short",
+                   "frozenAt": "2026-07-28T12:00:00Z"}
+        assert not is_valid_frozen_policy(freeze)
+        maturity = compute_maturity_level([], freeze)
+        assert maturity["isFrozen"] is False
+
+    def test_malformed_timestamp_blocks_test_evaluation(self):
+        """A malformed frozenAt timestamp blocks test evaluation."""
+        freeze = {"frozen": True, "commitSha": "a" * 40,
+                   "frozenAt": "not-a-timestamp"}
+        assert not is_valid_frozen_policy(freeze)
+        with pytest.raises(RuntimeError):
+            require_policy_freeze_for_test_evaluation(freeze)
+
+    def test_malformed_sha_blocks_validated_maturity(self):
+        """A malformed SHA in an otherwise frozen policy prevents validated level."""
+        entries = []
+        for i in range(150):
+            entries.append({
+                "sourceId": f"src_{i % 3}",
+                "goldLabel": "BREAK",
+                "reviewStatus": "reviewed",
+                "reviewerCount": 2,
+                "needsSecondReview": False,
+                "labelConfidence": "high",
+                "labelOrigin": "human",
+                "split": "dev",
+                "samplingTags": ["independent_utterance", "join_like"],
+                "timingBand": ["0-100ms", "101-300ms", "301-500ms"][i % 3],
+                "contentStructure": "dialogue",
+                "originalSpokenLanguage": "es",
+                "sourceQualityTier": "native_original",
+            })
+        for i in range(50):
+            entries.append({
+                "sourceId": f"src_{i % 2}",
+                "goldLabel": "JOIN",
+                "reviewStatus": "reviewed",
+                "reviewerCount": 2,
+                "needsSecondReview": False,
+                "labelConfidence": "medium",
+                "labelOrigin": "human",
+                "split": "test",
+                "samplingTags": ["independent_utterance", "join_like"],
+                "timingBand": ["0-100ms", "101-300ms", "301-500ms"][i % 3],
+                "contentStructure": "dialogue" if i < 30 else "monologue",
+                "originalSpokenLanguage": "es",
+                "sourceQualityTier": "native_original",
+            })
+        bad_freeze = {"frozen": True, "commitSha": "zzzz",
+                       "frozenAt": "2026-07-28T12:00:00Z"}
+        maturity = compute_maturity_level(entries, bad_freeze)
+        assert maturity["maturityLevel"] != "validated", (
+            "Malformed SHA must prevent validated maturity"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 30. Report equality tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestReportEquality:
+    """Build and apply produce equal reports for equal inputs."""
+
+    def test_generate_equal_reports_for_equal_inputs(self):
+        """Two calls to generate_dataset_report with same inputs produce identical reports."""
+        manifest = [
+            {"sourceId": "src_a", "title": "A", "contentType": "talk",
+             "contentStructure": "monologue", "sourceQualityTier": "native_original",
+             "originalSpokenLanguage": "es", "subtitleLanguage": "es",
+             "spanishVariant": "es-ES", "fullSha256": "a" * 64, "cueCount": 10},
+        ]
+        reference = [
+            {"sourceId": "src_a", "cueId": "1", "sourceChecksum": "a" * 16},
+            {"sourceId": "src_a", "cueId": "2", "sourceChecksum": "a" * 16},
+        ]
+        entries = [
+            {"sourceId": "src_a", "sourceChecksum": "a" * 16,
+             "leftCueId": "1", "rightCueId": "2",
+             "leftRawText": "Hello", "rightRawText": "World",
+             "leftNormalized": "Hello", "rightNormalized": "World",
+             "leftLines": ["Hello"], "rightLines": ["World"],
+             "leftStartMs": 1000, "leftEndMs": 2000,
+             "rightStartMs": 2000, "rightEndMs": 3000,
+             "gapMs": 0, "overlapMs": 0,
+             "previousContext": [], "nextContext": [],
+             "speakerMarkers": {},
+             "samplingTags": ["independent_utterance"],
+             "structureTags": [], "punctuationTags": [],
+             "linguisticTags": [], "timingBand": "0-100ms",
+             "chainId": None, "sceneId": "s1", "split": "dev",
+             "sourceQualityTier": "native_original",
+             "contentStructure": "monologue",
+             "originalSpokenLanguage": "es",
+             "goldLabel": None, "labelConfidence": None,
+             "reviewerCount": 0, "needsSecondReview": False,
+             "reviewReason": "", "reviewStatus": "unreviewed",
+             "labelOrigin": None,
+             },
+        ]
+
+        report1 = generate_dataset_report(entries, manifest, reference)
+        report2 = generate_dataset_report(entries, manifest, reference)
+
+        json1 = json.dumps(report1, sort_keys=True)
+        json2 = json.dumps(report2, sort_keys=True)
+        assert json1 == json2, "Equal inputs should produce equal reports"
+
+    def test_regenerated_report_equals_generated(self):
+        """The regenerated committed report equals generate_dataset_report with same inputs."""
+        with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+            manifest_data = json.load(f)
+        manifest = manifest_data.get("sources", [])
+        with open(REFERENCE_PATH, "r", encoding="utf-8") as f:
+            reference = json.load(f)
+        with open(POLICY_FREEZE_PATH, "r", encoding="utf-8") as f:
+            freeze = json.load(f)
+
+        fresh_report = generate_dataset_report(entries, manifest, reference, freeze)
+
+        with open(REPORT_PATH, "r", encoding="utf-8") as f:
+            committed_report = json.load(f)
+
+        # Align the created timestamp (may differ by second)
+        committed_report["datasetReport"]["created"] = fresh_report["datasetReport"]["created"]
+
+        committed_json = json.dumps(committed_report, sort_keys=True)
+        fresh_json = json.dumps(fresh_report, sort_keys=True)
+        assert committed_json == fresh_json, (
+            "Committed report must equal fresh generate_dataset_report output"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 31. Ledger event ordering
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestLedgerEventOrdering:
+    """Event ordering validation rules."""
+
+    VALID_IDS = {"src_a:1:2"}
+
+    def _review(self, **overrides) -> dict:
+        ev = {
+            "eventType": "review",
+            "boundaryId": "src_a:1:2",
+            "reviewId": "rev-001",
+            "reviewerId": "reviewer-a",
+            "reviewRound": 1,
+            "label": "JOIN",
+            "confidence": "high",
+            "reason": "Clear join",
+            "createdAt": "2026-07-28T10:00:00Z",
+            "labelOrigin": "human",
+        }
+        ev.update(overrides)
+        return ev
+
+    def _adjudication(self, **overrides) -> dict:
+        ev = {
+            "eventType": "adjudication",
+            "boundaryId": "src_a:1:2",
+            "reviewId": "adj-001",
+            "reviewerId": "adjudicator-1",
+            "label": "BREAK",
+            "confidence": "high",
+            "reason": "Adjudicated",
+            "createdAt": "2026-07-28T12:00:00Z",
+            "labelOrigin": "human",
+        }
+        ev.update(overrides)
+        return ev
+
+    def test_missing_reason_rejected(self):
+        """Missing or empty reason is rejected."""
+        events = [self._review(reason="")]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert any("reason" in e for e in errors), "Empty reason should be rejected"
+
+    def test_review_after_adjudication_rejected(self):
+        """Review event after adjudication is rejected."""
+        events = [
+            self._adjudication(reviewId="adj-1"),
+            self._review(reviewId="r1", reviewRound=1,
+                         createdAt="2026-07-28T13:00:00Z"),
+        ]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert any("review event after adjudication" in e for e in errors)
+
+    def test_valid_order_passes(self):
+        """Round 1, round 2, then adjudication in chronological order passes."""
+        events = [
+            self._review(reviewId="r1", reviewerId="rev-a", label="JOIN",
+                         createdAt="2026-07-28T10:00:00Z"),
+            self._review(reviewId="r2", reviewerId="rev-b", label="BREAK",
+                         reviewRound=2, createdAt="2026-07-28T11:00:00Z"),
+            self._adjudication(reviewId="adj-1",
+                               createdAt="2026-07-28T12:00:00Z"),
+        ]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert errors == [], f"Expected no errors, got: {errors}"
+
+    def test_round_two_before_round_one_rejected(self):
+        """Round two event before round one is rejected."""
+        events = [
+            self._review(reviewId="r2", reviewerId="rev-a", label="JOIN",
+                         reviewRound=2, createdAt="2026-07-28T09:00:00Z"),
+            self._review(reviewId="r1", reviewerId="rev-b", label="BREAK",
+                         reviewRound=1, createdAt="2026-07-28T10:00:00Z"),
+        ]
+        errors = validate_ledger_events(events, self.VALID_IDS)
+        assert any("round two event before round one" in e for e in errors)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 32. Adjudicator does not inflate reviewerCount
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestReviewerCount:
+    """reviewerCount counts independent reviewers, not adjudicator."""
+
+    def _review(self, **overrides) -> dict:
+        ev = {
+            "eventType": "review",
+            "boundaryId": "test:1:2",
+            "reviewId": "rev-001",
+            "reviewerId": "reviewer-a",
+            "reviewRound": 1,
+            "label": "JOIN",
+            "confidence": "high",
+            "reason": "Test",
+            "createdAt": "2026-07-28T10:00:00Z",
+            "labelOrigin": "human",
+        }
+        ev.update(overrides)
+        return ev
+
+    def _adjudication(self, **overrides) -> dict:
+        ev = {
+            "eventType": "adjudication",
+            "boundaryId": "test:1:2",
+            "reviewId": "adj-001",
+            "reviewerId": "adjudicator-1",
+            "label": "BREAK",
+            "confidence": "high",
+            "reason": "Final",
+            "createdAt": "2026-07-28T12:00:00Z",
+            "labelOrigin": "human",
+        }
+        ev.update(overrides)
+        return ev
+
+    def test_adjudicator_not_counted_as_reviewer(self):
+        """Adjudicator does not inflate reviewerCount."""
+        events = [
+            self._review(reviewId="r1", reviewerId="rev-a"),
+            self._review(reviewId="r2", reviewerId="rev-b", reviewRound=2),
+            self._adjudication(reviewId="adj-1"),
+        ]
+        state = derive_review_state(events)
+        assert state["reviewerCount"] == 2, (
+            f"Expected 2 reviewers (rev-a, rev-b), got {state['reviewerCount']}"
+        )
+        assert state["reviewStatus"] == "adjudicated"

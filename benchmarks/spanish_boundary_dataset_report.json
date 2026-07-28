@@ -157,7 +157,7 @@
     ],
     "reviewedJoin": 0,
     "reviewedBreak": 0,
-    "adjudicatedCount": 0,
+    "needsAdjudicationCount": 0,
     "isFrozen": false
   }
 }

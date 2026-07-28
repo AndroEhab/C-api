@@ -51,10 +51,14 @@ from benchmarks.spanish_benchmark_lib import (
     compute_maturity_level,
     is_operationally_ready,
     generate_dataset_report,
+    load_policy_freeze,
 )
 
 
 # ── constants ──────────────────────────────────────────────────────────────
+
+BENCHMARK_DIR = Path(__file__).resolve().parent
+POLICY_FREEZE_PATH = BENCHMARK_DIR / "spanish_policy_freeze.json"
 
 _ELLIPSIS_RE = re.compile(r"\.\.\.|…")
 _DIALOGUE_DASH_RE = re.compile(r"^\s*(?:--?|[–—])\s+")
@@ -929,13 +933,7 @@ def _generate_review_csv(
             if row.get("chainId") is None:
                 row["chainId"] = ""
 
-
-
-
-
-
-
-
+            writer.writerow(row)
 
 
 
@@ -1161,8 +1159,11 @@ def main() -> None:
     _generate_review_csv(sampled, csv_path)
     print(f"Saved CSV review to {csv_path}")
 
+    # Load policy freeze for dataset report
+    policy_freeze = load_policy_freeze(POLICY_FREEZE_PATH)
+
     # Dataset report
-    report = generate_dataset_report(sampled, manifest_sources, ref)
+    report = generate_dataset_report(sampled, manifest_sources, ref, policy_freeze)
     report_path = args.output.parent / "spanish_boundary_dataset_report.json"
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)

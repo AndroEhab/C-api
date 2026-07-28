@@ -35,6 +35,41 @@ VALID_REVIEW_STATUSES = frozenset({
 })
 
 
+def is_valid_frozen_policy(freeze: dict[str, Any]) -> bool:
+    """Return True only when the policy freeze is a valid frozen policy.
+
+    Returns True when:
+    - frozen is exactly true
+    - commitSha is a valid 40-character lowercase hexadecimal SHA
+    - frozenAt is a valid ISO-8601 timestamp
+    - no validation errors exist
+    """
+    # Must be exactly True (not truthy like 1)
+    if not isinstance(freeze.get("frozen"), bool) or freeze.get("frozen") is not True:
+        return False
+
+    sha = freeze.get("commitSha")
+    if not isinstance(sha, str) or len(sha) != 40:
+        return False
+    if not all(c in "0123456789abcdef" for c in sha):
+        return False
+
+    fa = freeze.get("frozenAt")
+    if not isinstance(fa, str) or not fa:
+        return False
+    try:
+        datetime.fromisoformat(fa)
+    except (ValueError, TypeError):
+        return False
+
+    # Must have no validation errors
+    errors = validate_policy_freeze(freeze)
+    if errors:
+        return False
+
+    return True
+
+
 def load_policy_freeze(path: Path) -> dict[str, Any]:
     """Load the policy freeze record from a JSON file."""
     if not path.exists():
@@ -71,20 +106,25 @@ def validate_policy_freeze(freeze: dict[str, Any]) -> list[str]:
 
 def require_policy_freeze_for_test_evaluation(freeze: dict[str, Any]) -> None:
     """Raise if the policy freeze does not permit test evaluation."""
-    if not freeze.get("frozen"):
+    if not is_valid_frozen_policy(freeze):
+        # Provide specific error message
+        if not isinstance(freeze.get("frozen"), bool) or not freeze.get("frozen"):
+            raise RuntimeError(
+                "Test evaluation blocked: policy is not frozen. "
+                "Set frozen=true with a valid commitSha and frozenAt."
+            )
+        sha = freeze.get("commitSha")
+        if not sha or not isinstance(sha, str) or len(sha) != 40:
+            raise RuntimeError(
+                "Test evaluation blocked: invalid or missing commitSha in freeze record."
+            )
+        fa = freeze.get("frozenAt")
+        if not fa or not isinstance(fa, str):
+            raise RuntimeError(
+                "Test evaluation blocked: missing frozenAt in freeze record."
+            )
         raise RuntimeError(
-            "Test evaluation blocked: policy is not frozen. "
-            "Set frozen=true with a valid commitSha and frozenAt."
-        )
-    sha = freeze.get("commitSha")
-    if not sha or not isinstance(sha, str) or len(sha) != 40:
-        raise RuntimeError(
-            "Test evaluation blocked: invalid or missing commitSha in freeze record."
-        )
-    fa = freeze.get("frozenAt")
-    if not fa or not isinstance(fa, str):
-        raise RuntimeError(
-            "Test evaluation blocked: missing frozenAt in freeze record."
+            "Test evaluation blocked: policy freeze has validation errors."
         )
 
 
@@ -245,7 +285,15 @@ def validate_ledger_events(
                 f"(reviewId={review_id!r})"
             )
 
-        # 9. malformed createdAt
+        # 9a. non-empty reason
+        reason = ev.get("reason", "")
+        if not reason:
+            errors.append(
+                f"Line {line_idx}: missing or empty reason "
+                f"(reviewId={review_id!r})"
+            )
+
+        # 10. malformed createdAt
         created_at = ev.get("createdAt")
         if created_at:
             try:
@@ -298,6 +346,28 @@ def validate_ledger_events(
                     f"without existing round-one event"
                 )
 
+        # - event ordering: round one must appear before round two
+        round_one_created: str | None = None
+        round_two_created: str | None = None
+        for e in evs:
+            if e.get("reviewRound") == 1:
+                if round_one_created is None:
+                    round_one_created = e.get("createdAt", "")
+            elif e.get("reviewRound") == 2:
+                if round_two_created is None:
+                    round_two_created = e.get("createdAt", "")
+        if round_one_created and round_two_created:
+            try:
+                t1 = datetime.fromisoformat(round_one_created)
+                t2 = datetime.fromisoformat(round_two_created)
+                if t1 > t2:
+                    errors.append(
+                        f"boundaryId={bid!r}: round two event before round one event "
+                        f"({round_two_created} < {round_one_created})"
+                    )
+            except (ValueError, TypeError):
+                pass
+
         # - an adjudication without a disagreement
         adjudications = by_type.get("adjudication", [])
         reviews = by_type.get("review", [])
@@ -315,6 +385,29 @@ def validate_ledger_events(
                     f"boundaryId={bid!r}: adjudication without disagreement "
                     f"(reviewer labels: {reviewer_labels})"
                 )
+
+            # - both independent reviews must appear before adjudication
+            for adj in adjudications:
+                adj_time_str = adj.get("createdAt", "")
+                if not adj_time_str:
+                    continue
+                try:
+                    adj_time = datetime.fromisoformat(adj_time_str)
+                    for rev in reviews:
+                        rev_time_str = rev.get("createdAt", "")
+                        if rev_time_str:
+                            try:
+                                rev_time = datetime.fromisoformat(rev_time_str)
+                                if rev_time > adj_time:
+                                    errors.append(
+                                        f"boundaryId={bid!r}: review event after adjudication "
+                                        f"(reviewId={rev.get('reviewId', '?')} at {rev_time_str} > "
+                                        f"adjudication at {adj_time_str})"
+                                    )
+                            except (ValueError, TypeError):
+                                pass
+                except (ValueError, TypeError):
+                    pass
 
         # - duplicate active reviews from the same reviewer and round
         reviewer_round_count: dict[tuple[str, int], int] = {}
@@ -377,12 +470,12 @@ def derive_review_state(events: list[dict[str, Any]]) -> dict[str, Any]:
             label = "AMBIGUOUS"
             confidence = "low"
 
-        # Count unique human reviewers from ALL events
-        reviewer_ids = _unique_reviewer_ids(events)
+        # Count unique human reviewers from REVIEW events only (not adjudicator)
+        reviewer_ids_from_reviews = _unique_reviewer_ids(reviews)
         state.update({
             "goldLabel": label,
             "labelConfidence": confidence,
-            "reviewerCount": len(reviewer_ids),
+            "reviewerCount": len(reviewer_ids_from_reviews),
             "needsSecondReview": False,
             "reviewReason": adj.get("reason", ""),
             "reviewStatus": "adjudicated",
@@ -610,9 +703,9 @@ def compute_maturity_level(
     dev_reviewed_pct = dev_reviewed / dev_total if dev_total else 0.0
     test_reviewed_pct = test_reviewed / test_total if test_total else 0.0
 
-    # Policy freeze state
+    # Policy freeze state — only true when fully valid
     if policy_freeze is not None:
-        is_frozen = bool(policy_freeze.get("frozen", False))
+        is_frozen = is_valid_frozen_policy(policy_freeze)
     else:
         is_frozen = False
 
