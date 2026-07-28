@@ -759,3 +759,80 @@ def test_sequential_spanish_requests_produce_identical_output() -> None:
     for e1, e2 in zip(spa1_evidence, spa2_evidence):
         assert e1["characterOffset"] == e2["characterOffset"]
         assert e1["boundaryProbability"] == e2["boundaryProbability"]
+
+
+def test_shared_service_concurrency_isolation() -> None:
+    """One shared SaTSentenceReconstructor + one shared model, simultaneous calls.
+
+    Both English and neutral (Spanish) scoring run on the same service
+    instance and same model. The barrier forces both predict_proba calls
+    to overlap. Each must still receive the correctly profile-joined text
+    and return the correct character offsets.
+    """
+    import threading
+
+    barrier = threading.Barrier(2)
+    shared_model = RecordingProbabilityModel()
+    shared_model.barrier = barrier
+
+    eng_evidence: list[dict] = []
+    neu_evidence: list[dict] = []
+    errors: list[str] = []
+
+    svc = SaTSentenceReconstructor(model=shared_model)
+
+    def english_request() -> None:
+        try:
+            evidence = svc.score_boundaries(
+                ["I", "'m ready."],
+                profile=EnglishBoundaryProfile(),
+            )
+            eng_evidence.extend(evidence)
+        except Exception as exc:
+            errors.append(f"English: {exc!r}")
+
+    def neutral_request() -> None:
+        try:
+            evidence = svc.score_boundaries(
+                ["I", "'m ready."],
+                profile=NeutralBoundaryProfile(),
+            )
+            neu_evidence.extend(evidence)
+        except Exception as exc:
+            errors.append(f"Neutral: {exc!r}")
+
+    t1 = threading.Thread(target=english_request)
+    t2 = threading.Thread(target=neutral_request)
+
+    t1.start()
+    t2.start()
+
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+
+    # The shared model saw exactly two calls — one English-joined, one neutral-joined.
+    assert "I'm ready." in shared_model.calls, (
+        f"English-joined input missing from model calls: {shared_model.calls}"
+    )
+    assert "I 'm ready." in shared_model.calls, (
+        f"Neutral-joined input missing from model calls: {shared_model.calls}"
+    )
+    assert len(shared_model.calls) == 2, (
+        f"Expected exactly 2 model calls, got {len(shared_model.calls)}: {shared_model.calls}"
+    )
+
+    # Both got one boundary (between 'I' and "'m ready.")
+    assert len(eng_evidence) == 1, f"English evidence count: {len(eng_evidence)}"
+    assert len(neu_evidence) == 1, f"Neutral evidence count: {len(neu_evidence)}"
+
+    # Both joined strings start at offset 0 for the first boundary
+    eng_offset = eng_evidence[0]["characterOffset"]
+    assert eng_offset == 0, f"English offset {eng_offset}"
+    neu_offset = neu_evidence[0]["characterOffset"]
+    assert neu_offset == 0, f"Neutral offset {neu_offset}"
+
+    # Both boundaries should have a valid probability
+    assert 0.0 <= eng_evidence[0]["boundaryProbability"] <= 1.0
+    assert 0.0 <= neu_evidence[0]["boundaryProbability"] <= 1.0
