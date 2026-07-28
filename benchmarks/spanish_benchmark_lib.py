@@ -13,6 +13,7 @@ This is the single source of truth for:
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter
 from datetime import datetime, timezone
@@ -1100,3 +1101,168 @@ def generate_dataset_report(
 def _entry_key(entry: dict) -> str:
     """Build a readable key for an entry for error messages."""
     return f"{entry.get('sourceId', '?')}:{entry.get('leftCueId', '?')}:{entry.get('rightCueId', '?')}"
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Queue row canonicalisation and hashing
+# ──────────────────────────────────────────────────────────────────────
+
+
+_QUEUE_STRUCTURED_FIELDS = frozenset({
+    "previousContext", "nextContext", "speakerMarkers",
+    "samplingTags", "structureTags", "punctuationTags",
+    "linguisticTags", "leftLines", "rightLines",
+})
+
+
+def build_queue_row(
+    candidate: dict,
+    queue_id: str,
+    reviewer: str,
+    review_round: int,
+    split: str,
+    source_manifest: dict[str, dict] | None = None,
+) -> dict[str, str]:
+    """Build a canonical queue row from a candidate entry.
+
+    Every value in the returned dict is a string, matching CSV output.
+    Structured fields (lists, dicts) are JSON-serialised deterministically.
+    Review fields (goldLabel, labelConfidence, reviewReason) are empty.
+    """
+    row: dict[str, str] = {}
+    src_id = candidate.get("sourceId", "")
+    left_id = str(candidate.get("leftCueId", ""))
+    right_id = str(candidate.get("rightCueId", ""))
+
+    # Queue identity columns
+    row["queueId"] = queue_id
+    row["boundaryId"] = build_boundary_key(src_id, left_id, right_id)
+    row["queueReviewer"] = reviewer
+    row["queueRound"] = str(review_round)
+    row["queueSplit"] = split
+    row["reviewRound"] = str(review_round)
+
+    # Candidate fields (all stringified)
+    for field in ("sourceId", "sceneId", "split",
+                  "leftCueId", "rightCueId",
+                  "leftRawText", "rightRawText",
+                  "leftNormalized", "rightNormalized",
+                  "gapMs", "overlapMs",
+                  "timingBand", "chainId",
+                  "contentStructure", "originalSpokenLanguage"):
+        val = candidate.get(field)
+        if val is None:
+            row[field] = ""
+        else:
+            row[field] = str(val)
+
+    # Numerical fields
+    for field in ("leftStartMs", "leftEndMs", "rightStartMs", "rightEndMs"):
+        val = candidate.get(field)
+        if val is None:
+            row[field] = ""
+        else:
+            row[field] = str(val)
+
+    # Source manifest metadata
+    if source_manifest is not None:
+        m = source_manifest.get(src_id, {})
+    else:
+        m = {}
+    row["spanishVariant"] = m.get("spanishVariant", "unknown")
+    row["contentType"] = m.get("contentType", "other")
+    row["sourceQualityTier"] = m.get("sourceQualityTier", "unknown")
+
+    # JSON-encode structured fields
+    for field in _QUEUE_STRUCTURED_FIELDS:
+        val = candidate.get(field)
+        if val is None:
+            row[field] = ""
+        elif isinstance(val, (list, dict)):
+            row[field] = json.dumps(val, ensure_ascii=False)
+        else:
+            row[field] = str(val)
+
+    # Speaker markers always present
+    if "speakerMarkers" not in row or not row["speakerMarkers"]:
+        row["speakerMarkers"] = json.dumps({}, ensure_ascii=False)
+
+    # Empty review fields for labeler
+    row["goldLabel"] = ""
+    row["labelConfidence"] = ""
+    row["reviewReason"] = ""
+
+    return row
+
+
+def compute_queue_content_hash(rows: list[dict]) -> str:
+    """Compute SHA-256 of ordered queue content, excluding mutable review fields.
+
+    The excluded fields are: goldLabel, labelConfidence, reviewReason.
+    Operates on canonical row dicts (as produced by build_queue_row or read from CSV).
+    """
+    canonical: list[dict[str, str]] = []
+    for row in rows:
+        r = dict(row)
+        r.pop("goldLabel", None)
+        r.pop("labelConfidence", None)
+        r.pop("reviewReason", None)
+        canonical.append({k: r[k] for k in sorted(r.keys())})
+    content = json.dumps(canonical, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def validate_queue_manifest(manifest: dict) -> list[str]:
+    """Validate a queue manifest. Returns list of error messages (empty = valid)."""
+    errors: list[str] = []
+
+    # missing or empty queueId
+    queue_id = manifest.get("queueId", "")
+    if not queue_id:
+        errors.append("Manifest missing or empty queueId")
+
+    # missing reviewerId
+    reviewer_id = manifest.get("reviewerId", "")
+    if not reviewer_id:
+        errors.append("Manifest missing reviewerId")
+
+    # invalid reviewRound
+    review_round = manifest.get("reviewRound")
+    if not isinstance(review_round, int) or review_round not in (1, 2):
+        errors.append(f"Manifest invalid reviewRound: {review_round!r}")
+
+    # invalid split
+    split = manifest.get("split", "")
+    if split not in ("dev", "test"):
+        errors.append(f"Manifest invalid split: {split!r}")
+
+    # missing boundaryIds
+    boundary_ids = manifest.get("boundaryIds", [])
+    if not isinstance(boundary_ids, list) or len(boundary_ids) == 0:
+        errors.append("Manifest missing or empty boundaryIds")
+
+    # duplicate boundaryIds
+    if isinstance(boundary_ids, list):
+        seen: set[str] = set()
+        for bid in boundary_ids:
+            if bid in seen:
+                errors.append(f"Manifest duplicate boundaryId: {bid}")
+            seen.add(bid)
+
+        # rowCount not equal to len(boundaryIds)
+        row_count = manifest.get("rowCount")
+        if isinstance(row_count, int) and row_count != len(boundary_ids):
+            errors.append(
+                f"Manifest rowCount {row_count} != len(boundaryIds) {len(boundary_ids)}"
+            )
+
+    # missing contentSha256
+    content_hash = manifest.get("contentSha256", "")
+    if not content_hash:
+        errors.append("Manifest missing or empty contentSha256")
+    elif not isinstance(content_hash, str) or len(content_hash) != 64:
+        errors.append(f"Manifest contentSha256 must be 64 hex chars, got {len(content_hash) if isinstance(content_hash, str) else type(content_hash).__name__}")
+    elif not all(c in "0123456789abcdef" for c in content_hash):
+        errors.append("Manifest contentSha256 is not lowercase hexadecimal")
+
+    return errors

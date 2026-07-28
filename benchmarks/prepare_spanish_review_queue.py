@@ -15,7 +15,7 @@ Usage:
         --batch-index 0 \\
         --output review_queue_dev_r1_batch0.csv
 
-Round 1: All entries in the given split, in deterministic order.
+Round 1: All entries in the given split, in deterministic diverse order.
 Round 2: Only boundaries with a valid round-one review from a different reviewer,
          without an existing round-two review from this reviewer,
          and not already adjudicated. Prioritizes JOIN medium/low confidence
@@ -25,13 +25,16 @@ Every row contains:
     queueId, boundaryId (= sourceId:leftCueId:rightCueId),
     queueReviewer, queueRound, queueSplit
 
+Batch positions are stable: universe is partitioned into fixed 30-entry blocks.
+Batch completion does not shift remaining batch positions.
+
 A sidecar manifest (review_queue.manifest.json) is generated alongside each CSV.
+The content hash covers canonical queue rows with structured field serialisation.
 """
 
 from __future__ import annotations
 import argparse
 import csv
-import hashlib
 import json
 import random
 import sys
@@ -48,6 +51,12 @@ FIXTURE_PATH = BENCHMARK_DIR / "spanish_boundary_candidates.json"
 LEDGER_PATH = BENCHMARK_DIR / "spanish_boundary_reviews.jsonl"
 MANIFEST_PATH = BENCHMARK_DIR / "spanish_source_manifest.json"
 
+from benchmarks.spanish_benchmark_lib import (
+    build_boundary_key,
+    build_queue_row,
+    compute_queue_content_hash,
+)
+
 
 def load_ledger(path: Path) -> list[dict]:
     """Load review ledger entries."""
@@ -60,10 +69,6 @@ def load_ledger(path: Path) -> list[dict]:
             if line:
                 events.append(json.loads(line))
     return events
-
-
-def build_boundary_key(source_id: str, left_cue_id: str, right_cue_id: str) -> str:
-    return f"{source_id}:{left_cue_id}:{right_cue_id}"
 
 
 def get_reviewed_keys(events: list[dict]) -> set[str]:
@@ -156,6 +161,39 @@ def get_batch_boundary_keys(ledger_path: Path, reviewer_id: str, review_round: i
     return keys
 
 
+def _build_diverse_universe(entries: list[dict]) -> list[dict]:
+    """Build a deterministic round-robin interleaved universe.
+
+    Groups entries by source, sorts each group by (chainId, leftCueId),
+    then round-robins between sources to ensure source diversity.
+
+    Returns the interleaved list.
+    """
+    by_source: dict[str, list[dict]] = {}
+    for e in entries:
+        src = e["sourceId"]
+        by_source.setdefault(src, []).append(e)
+
+    sources = sorted(by_source.keys())
+    for src in sources:
+        by_source[src].sort(key=lambda e: (
+            e.get("chainId") or "",
+            int(e["leftCueId"]) if e["leftCueId"].lstrip("-").isdigit() else e["leftCueId"],
+        ))
+
+    max_len = max(len(by_source[s]) for s in sources)
+    positions = {s: 0 for s in sources}
+    universe: list[dict] = []
+
+    for _ in range(max_len):
+        for src in sources:
+            if positions[src] < len(by_source[src]):
+                universe.append(by_source[src][positions[src]])
+                positions[src] += 1
+
+    return universe
+
+
 def prepare_queue(args: argparse.Namespace) -> None:
     # Load fixture
     with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
@@ -174,13 +212,13 @@ def prepare_queue(args: argparse.Namespace) -> None:
     split_entries = [e for e in entries if e.get("split") == args.split]
 
     if args.round == 1:
-        queue = _prepare_round1(
+        candidates = _prepare_round1(
             split_entries, manifest_by_id,
             reviewed_keys, args.reviewer, args.split,
             args.limit, args.batch_index, LEDGER_PATH,
         )
     elif args.round == 2:
-        queue = _prepare_round2(
+        candidates = _prepare_round2(
             entries, split_entries, manifest_by_id,
             events, reviewed_keys, args.reviewer, args.split,
             args.limit, args.batch_index,
@@ -189,17 +227,27 @@ def prepare_queue(args: argparse.Namespace) -> None:
         print(f"ERROR: Unknown round {args.round}")
         sys.exit(1)
 
-    if not queue:
+    if not candidates:
         print("WARNING: Empty queue — no eligible boundaries found.")
-        # Still write empty files
 
     queue_id = (
         f"{args.split}_r{args.round}_{args.reviewer}"
         f"{f'_batch{args.batch_index}' if args.limit else ''}"
     )
 
-    _write_queue_csv(queue, manifest_by_id, args.output, round_num=args.round, queue_id=queue_id, reviewer=args.reviewer, split=args.split)
-    _write_queue_manifest(queue, args.output, queue_id, args.reviewer, args.round, args.split)
+    # Build canonical queue rows (shared representation for CSV + hash)
+    rows = [
+        build_queue_row(c, queue_id, args.reviewer, args.round, args.split, manifest_by_id)
+        for c in candidates
+    ]
+
+    # Compute hash BEFORE writing CSV (same canonical rows)
+    content_hash = compute_queue_content_hash(rows)
+
+    # Write CSV
+    _write_queue_csv(rows, args.output)
+    # Write manifest
+    _write_queue_manifest(rows, args.output, queue_id, args.reviewer, args.round, args.split, content_hash)
 
 
 def _prepare_round1(
@@ -212,48 +260,46 @@ def _prepare_round1(
     batch_index: int,
     ledger_path: Path,
 ) -> list[dict]:
-    """Round 1: all unreviewed entries in split, deterministic order."""
-    # Exclude already reviewed
-    queue = [
+    """Round 1: stable batch selection with source diversity.
+
+    Steps:
+    1. Build deterministic diverse universe from unreviewed split entries.
+    2. Partition universe into fixed 30-entry blocks.
+    3. For the requested batch, return only unsubmitted entries.
+    """
+    # Exclude entries already reviewed by ANYONE
+    eligible = [
         e for e in split_entries
         if build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"]) not in reviewed_keys
     ]
 
-    # Sort by source, then leftCueId for deterministic order
-    queue.sort(key=lambda e: (e["sourceId"], int(e["leftCueId"]) if e["leftCueId"].lstrip("-").isdigit() else e["leftCueId"]))
+    # Build diverse universe (round-robin between sources)
+    universe = _build_diverse_universe(eligible)
 
-    # Get boundaries already submitted by this reviewer/round in completed batches
+    # Get boundaries already submitted by this reviewer/round
     already_done = get_completed_queue_boundaries(ledger_path, reviewer, 1)
 
-    # Filter out already-submitted boundaries
-    queue = [
-        e for e in queue
+    if limit is None:
+        # No limit — return all eligible entries
+        return [e for e in universe
+                if build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"]) not in already_done]
+
+    # Partition universe into fixed batch positions
+    batch_size = limit
+    start = batch_index * batch_size
+    end = start + batch_size
+
+    batch_slice = universe[start:end]
+    if not batch_slice:
+        print(f"WARNING: batch_index {batch_index} starts beyond {len(universe)} available entries")
+        return []
+
+    # Filter out already-submitted entries (stable: positions don't shift)
+    batch = [
+        e for e in batch_slice
         if build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"]) not in already_done
     ]
 
-    if limit is None:
-        # No limit — return full split
-        return queue
-
-    # Batching: select deterministic slice
-    # Group nearby boundaries from the same chain/scene together where practical
-    # Use batch_index to slice a deterministic window
-    total = len(queue)
-
-    # Compute start index for this batch
-    batch_size = limit
-    start = batch_index * batch_size
-    end = min(start + batch_size, total)
-
-    if start >= total:
-        print(f"WARNING: batch_index {batch_index} starts beyond {total} available entries")
-        return []
-
-    batch = queue[start:end]
-
-    # Ensure source and sampling-tag variety within the batch
-    # (The deterministic sort already gives natural variety since entries
-    #  are grouped by source then cue. For small batches, verify diversity.)
     return batch
 
 
@@ -272,6 +318,8 @@ def _prepare_round2(
     no existing round-two review from this reviewer, not adjudicated.
     Prioritizes JOIN medium/low confidence and needsSecondReview.
     Never includes unreviewed boundaries.
+
+    Uses stable batch positions from the diverse universe for round-two-eligible entries.
     """
     rng = random.Random(42)
 
@@ -289,11 +337,6 @@ def _prepare_round2(
     all_first_reviews = get_first_review_per_boundary(events)
 
     # Build a set of entries that are eligible for round two:
-    # 1. Have a valid round-one review
-    # 2. Reviewed by a DIFFERENT reviewer (not the current one)
-    # 3. Current reviewer hasn't already done round two on this
-    # 4. Not already adjudicated
-    # 5. In the target split
     eligible: list[dict] = []
     split_entry_map: dict[str, dict] = {}
     for e in split_entries:
@@ -339,10 +382,6 @@ def _prepare_round2(
             unique_eligible.append(e)
 
     # Priority sorting:
-    # 1. JOIN + medium confidence
-    # 2. JOIN + low confidence
-    # 3. needsSecondReview (other reasons)
-    # 4. All other eligible boundaries
     def priority(e: dict) -> tuple:
         fl = e.get("_first_label", "")
         fc = e.get("_first_confidence", "")
@@ -357,86 +396,79 @@ def _prepare_round2(
 
     unique_eligible.sort(key=priority)
 
+    # For stable batching, build a universe in priority order then diverse order within ties
+    # Since round two is small, use the priority-sorted list directly
+    priority_queue = unique_eligible
+
     # Calculate target: at least 20% of split entries, but at most available
     total_in_split = len(split_entries)
     target = max(1, int(total_in_split * 0.2))
-    target = min(target, len(unique_eligible))
+    target = min(target, len(priority_queue))
 
     # If limit is specified, cap target
     if limit is not None:
         target = min(target, limit)
 
-    # Select the top-priority entries
-    selected_keys: set[str] = set()
-    queue: list[dict] = []
+    # Build diverse universe for round-two: mix sources within priority tiers
+    # Group priority-eligible entries by source within each tier
+    tier_groups: dict[int, dict[str, list[dict]]] = {}
+    for e in priority_queue:
+        p = priority(e)
+        p0 = p[0]
+        if p0 not in tier_groups:
+            tier_groups[p0] = {}
+        src = e["sourceId"]
+        tier_groups[p0].setdefault(src, []).append(e)
 
-    for e in unique_eligible:
-        if len(queue) >= target:
-            break
-        key = build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"])
-        if key not in selected_keys:
-            selected_keys.add(key)
-            queue.append(e)
+    # Within each tier, sort each source by (chainId, leftCueId)
+    for tier in tier_groups:
+        for src in tier_groups[tier]:
+            tier_groups[tier][src].sort(key=lambda e: (
+                e.get("chainId") or "",
+                int(e["leftCueId"]) if e["leftCueId"].lstrip("-").isdigit() else e["leftCueId"],
+            ))
 
-    # If we still have room, add more eligible boundaries (deterministic)
-    remaining = [e for e in unique_eligible
-                 if build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"]) not in selected_keys]
-    rng.shuffle(remaining)
+    # Build universe: within each priority tier, round-robin between sources
+    round2_universe: list[dict] = []
+    sources_sorted = sorted(manifest_by_id.keys())
+    for tier in sorted(tier_groups.keys()):
+        srcs_in_tier = sorted(tier_groups[tier].keys())
+        max_in_tier = max(len(tier_groups[tier][s]) for s in srcs_in_tier) if srcs_in_tier else 0
+        positions = {s: 0 for s in srcs_in_tier}
+        for pos in range(max_in_tier):
+            for src in srcs_in_tier:
+                if positions[src] < len(tier_groups[tier][src]):
+                    round2_universe.append(tier_groups[tier][src][positions[src]])
+                    positions[src] += 1
 
-    for e in remaining:
-        if len(queue) >= target:
-            break
-        key = build_boundary_key(e["sourceId"], e["leftCueId"], e["rightCueId"])
-        if key not in selected_keys:
-            selected_keys.add(key)
-            queue.append(e)
+    # Apply batch position
+    if limit is not None:
+        batch_start = batch_index * limit
+        batch_end = batch_start + limit
+        selected = round2_universe[batch_start:batch_end]
+    else:
+        selected = round2_universe[:target]
 
     # Strip internal metadata before writing
-    for e in queue:
+    for e in selected:
         e.pop("_first_label", None)
         e.pop("_first_confidence", None)
         e.pop("_needs_second", None)
 
-    # Sort for deterministic output
-    queue.sort(key=lambda e: (e["sourceId"], int(e["leftCueId"]) if e["leftCueId"].lstrip("-").isdigit() else e["leftCueId"]))
-
-    return queue
-
-
-def _compute_queue_content_hash(entries: list[dict]) -> str:
-    """Compute SHA-256 of ordered queue content, excluding mutable review fields.
-
-    The excluded fields are: goldLabel, labelConfidence, reviewReason
-    """
-    canonical_rows: list[dict] = []
-    for e in entries:
-        row = dict(e)
-        # Strip mutable review fields
-        row.pop("goldLabel", None)
-        row.pop("labelConfidence", None)
-        row.pop("reviewReason", None)
-        # Sort keys for deterministic serialisation
-        canonical_rows.append({k: row[k] for k in sorted(row.keys())})
-
-    content = json.dumps(canonical_rows, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return selected
 
 
 def _write_queue_manifest(
-    entries: list[dict],
+    rows: list[dict],
     output: Path,
     queue_id: str,
     reviewer: str,
     review_round: int,
     split: str,
+    content_hash: str,
 ) -> None:
     """Write the sidecar queue manifest JSON."""
-    boundary_ids: list[str] = []
-    for e in entries:
-        bid = build_boundary_key(e.get("sourceId", ""), e.get("leftCueId", ""), e.get("rightCueId", ""))
-        boundary_ids.append(bid)
-
-    content_hash = _compute_queue_content_hash(entries)
+    boundary_ids: list[str] = [r["boundaryId"] for r in rows]
 
     manifest = {
         "queueId": queue_id,
@@ -445,7 +477,7 @@ def _write_queue_manifest(
         "split": split,
         "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "boundaryIds": boundary_ids,
-        "rowCount": len(entries),
+        "rowCount": len(rows),
         "contentSha256": content_hash,
     }
 
@@ -456,85 +488,39 @@ def _write_queue_manifest(
 
 
 def _write_queue_csv(
-    entries: list[dict],
-    manifest_by_id: dict,
+    rows: list[dict],
     output: Path,
-    round_num: int,
-    queue_id: str,
-    reviewer: str,
-    split: str,
 ) -> None:
-    """Write the review queue CSV with all context needed for decisions."""
-    fieldnames = [
-        "queueId",
-        "boundaryId",
-        "queueReviewer",
-        "queueRound",
-        "queueSplit",
-        "reviewRound",
-        "sourceId", "spanishVariant", "contentType", "sourceQualityTier",
-        "contentStructure", "originalSpokenLanguage",
-        "sceneId", "split",
-        "leftCueId", "rightCueId",
-        "leftRawText", "rightRawText",
-        "leftNormalized", "rightNormalized",
-        "leftLines", "rightLines",
-        "leftStartMs", "leftEndMs", "rightStartMs", "rightEndMs",
-        "gapMs", "overlapMs",
-        "previousContext", "nextContext",
-        "speakerMarkers",
-        "samplingTags", "structureTags", "punctuationTags",
-        "linguisticTags", "timingBand",
-        "chainId",
-        # Review fields - empty for the labeler to fill
-        "goldLabel", "labelConfidence", "reviewReason",
-    ]
+    """Write canonical queue rows to CSV."""
+    if not rows:
+        fieldnames = [
+            "queueId", "boundaryId", "queueReviewer", "queueRound", "queueSplit",
+            "reviewRound", "sourceId", "spanishVariant", "contentType",
+            "sourceQualityTier", "contentStructure", "originalSpokenLanguage",
+            "sceneId", "split", "leftCueId", "rightCueId",
+            "leftRawText", "rightRawText", "leftNormalized", "rightNormalized",
+            "leftLines", "rightLines",
+            "leftStartMs", "leftEndMs", "rightStartMs", "rightEndMs",
+            "gapMs", "overlapMs",
+            "previousContext", "nextContext", "speakerMarkers",
+            "samplingTags", "structureTags", "punctuationTags",
+            "linguisticTags", "timingBand", "chainId",
+            "goldLabel", "labelConfidence", "reviewReason",
+        ]
+        with open(output, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+        print(f"Wrote 0 entries to {output}")
+        return
 
+    fieldnames = list(rows[0].keys())
     with open(output, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
-
-        for e in entries:
-            row = dict(e)
-            row["reviewRound"] = round_num
-            row["queueId"] = queue_id
-            row["boundaryId"] = build_boundary_key(
-                e.get("sourceId", ""), e.get("leftCueId", ""), e.get("rightCueId", ""),
-            )
-            row["queueReviewer"] = reviewer
-            row["queueRound"] = round_num
-            row["queueSplit"] = split
-
-            # Add manifest metadata
-            src = e["sourceId"]
-            m = manifest_by_id.get(src, {})
-            row["spanishVariant"] = m.get("spanishVariant", "unknown")
-            row["contentType"] = m.get("contentType", "other")
-            row["sourceQualityTier"] = m.get("sourceQualityTier", "unknown")
-
-            # JSON-encode structured fields
-            for field in ("previousContext", "nextContext",
-                          "speakerMarkers", "samplingTags",
-                          "structureTags", "punctuationTags",
-                          "linguisticTags", "leftLines", "rightLines"):
-                if field in row:
-                    row[field] = json.dumps(row[field], ensure_ascii=False)
-
-            # Empty review fields for labeler
-            row["goldLabel"] = ""
-            row["labelConfidence"] = ""
-            row["reviewReason"] = ""
-
-            if row.get("chainId") is None:
-                row["chainId"] = ""
-
+        for row in rows:
             writer.writerow(row)
 
-    print(f"Wrote {len(entries)} entries to {output}")
-    print(f"  Queue ID: {queue_id}")
-    print(f"  Round: {round_num}")
-    print(f"  Reviewer: {reviewer}")
-    print(f"  Split: {split}")
+    print(f"Wrote {len(rows)} entries to {output}")
 
 
 def main() -> None:

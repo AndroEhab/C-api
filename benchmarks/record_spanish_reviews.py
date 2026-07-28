@@ -15,12 +15,26 @@ Validates every row against the queue manifest, builds canonical boundaryId,
 ensures the boundary belongs to the supplied queue and split, requires
 label/confidence/reason, creates unique reviewId values, and appends events
 to spanish_boundary_reviews.jsonl with concurrency-safe writes.
+
+Manifest validation checks:
+- missing or empty queueId
+- missing reviewerId
+- invalid reviewRound (must be 1 or 2)
+- invalid split (must be dev or test)
+- missing or empty boundaryIds
+- duplicate boundaryIds
+- rowCount != len(boundaryIds)
+- missing or malformed contentSha256
+
+CSV row validation checks:
+- non-empty queueId, boundaryId, queueReviewer, queueRound, queueSplit
+- numeric queueRound
+- boundary IDs match manifest order
 """
 
 from __future__ import annotations
 import argparse
 import csv
-import hashlib
 import json
 import os
 import sys
@@ -39,9 +53,11 @@ LEDGER_PATH = BENCHMARK_DIR / "spanish_boundary_reviews.jsonl"
 
 from benchmarks.spanish_benchmark_lib import (
     build_boundary_key,
+    compute_queue_content_hash,
     derive_review_state,
     is_valid_frozen_policy,
     validate_ledger_events,
+    validate_queue_manifest,
 )
 
 
@@ -91,23 +107,6 @@ def load_queue_manifest(manifest_path: Path) -> dict:
         sys.exit(1)
     with open(manifest_path, "r", encoding="utf-8") as f:
         return json.load(f)
-
-
-def compute_queue_content_hash(rows: list[dict]) -> str:
-    """Compute SHA-256 of ordered queue content, excluding mutable review fields.
-
-    Must match the hash computed by prepare_spanish_review_queue.
-    """
-    canonical_rows: list[dict] = []
-    for row in rows:
-        r = dict(row)
-        # Strip mutable review fields
-        r.pop("goldLabel", None)
-        r.pop("labelConfidence", None)
-        r.pop("reviewReason", None)
-        canonical_rows.append({k: r[k] for k in sorted(r.keys())})
-    content = json.dumps(canonical_rows, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def _lock_path() -> Path:
@@ -160,11 +159,15 @@ def record_reviews(args: argparse.Namespace) -> None:
     manifest_hash = manifest.get("contentSha256", "")
     manifest_row_count = manifest.get("rowCount", 0)
 
-    # validate queue identity
-    if not queue_id:
-        print("ERROR: Queue manifest has no queueId", file=sys.stderr)
+    # ── Manifest validation ─────────────────────────────────────────
+    manifest_errors = validate_queue_manifest(manifest)
+    if manifest_errors:
+        for err in manifest_errors:
+            print(f"ERROR: {err}", file=sys.stderr)
+        print("Manifest validation failed.", file=sys.stderr)
         sys.exit(1)
 
+    # ── Queue identity checks ───────────────────────────────────────
     if manifest_reviewer != args.reviewer:
         print(
             f"ERROR: Manifest reviewer ({manifest_reviewer!r}) does not match "
@@ -192,11 +195,22 @@ def record_reviews(args: argparse.Namespace) -> None:
         print("ERROR: CSV file is empty", file=sys.stderr)
         sys.exit(1)
 
+    # ── Validate content hash BEFORE processing rows ────────────────
+    computed_hash = compute_queue_content_hash(rows)
+    if computed_hash != manifest_hash:
+        print(
+            f"ERROR: Queue content hash mismatch. Manifest: {manifest_hash}, "
+            f"computed: {computed_hash}. Queue content may have been modified.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # Validate and build events
     events: list[dict] = []
     errors: list[str] = []
     line_num = 0
     seen_boundary_ids_in_batch: set[str] = set()
+    csv_boundary_ids_in_order: list[str] = []
 
     for row in rows:
         line_num += 1
@@ -214,51 +228,72 @@ def record_reviews(args: argparse.Namespace) -> None:
         row_queue_split = row.get("queueSplit", "").strip()
         row_boundary_id = row.get("boundaryId", "").strip()
 
-        # 1. Check queue identity in row matches manifest
-        if row_queue_id and row_queue_id != queue_id:
+        csv_boundary_ids_in_order.append(boundary_id)
+
+        # 1. CSV identity column validation (non-empty)
+        if not row_queue_id:
+            errors.append(f"Row {line_num}: queueId is empty")
+            continue
+        if not row_boundary_id:
+            errors.append(f"Row {line_num}: boundaryId is empty")
+            continue
+        if not row_queue_reviewer:
+            errors.append(f"Row {line_num}: queueReviewer is empty")
+            continue
+        if not row_queue_round:
+            errors.append(f"Row {line_num}: queueRound is empty")
+            continue
+        if not row_queue_split:
+            errors.append(f"Row {line_num}: queueSplit is empty")
+            continue
+
+        # 2. Numeric queueRound
+        try:
+            row_round_int = int(row_queue_round)
+        except ValueError:
+            errors.append(f"Row {line_num}: queueRound is non-numeric: {row_queue_round!r}")
+            continue
+
+        # 3. Queue identity matches manifest
+        if row_queue_id != queue_id:
             errors.append(f"Row {line_num}: queueId {row_queue_id!r} does not match manifest {queue_id!r}")
             continue
 
-        if row_queue_reviewer and row_queue_reviewer != args.reviewer:
+        if row_queue_reviewer != args.reviewer:
             errors.append(f"Row {line_num}: queueReviewer {row_queue_reviewer!r} does not match --reviewer {args.reviewer!r}")
             continue
 
-        if row_queue_round:
-            try:
-                row_round = int(row_queue_round)
-                if row_round != args.round:
-                    errors.append(f"Row {line_num}: queueRound {row_round} does not match --round {args.round}")
-                    continue
-            except ValueError:
-                pass
+        if row_round_int != args.round:
+            errors.append(f"Row {line_num}: queueRound {row_round_int} does not match --round {args.round}")
+            continue
 
-        if row_queue_split and row_queue_split != manifest_split:
+        if row_queue_split != manifest_split:
             errors.append(f"Row {line_num}: queueSplit {row_queue_split!r} does not match manifest split {manifest_split!r}")
             continue
 
-        # 2. Check boundaryId consistency
-        if row_boundary_id and row_boundary_id != boundary_id:
+        # 4. Check boundaryId consistency
+        if row_boundary_id != boundary_id:
             errors.append(
                 f"Row {line_num}: boundaryId {row_boundary_id!r} does not match "
                 f"sourceId:leftCueId:rightCueId ({boundary_id!r})"
             )
             continue
 
-        # 3. Boundary must be in the fixture
+        # 5. Boundary must be in the fixture
         if boundary_id not in valid_boundary_ids:
             errors.append(
                 f"Row {line_num}: boundaryId={boundary_id} is not a valid candidate boundary"
             )
             continue
 
-        # 4. Boundary must be in this exact queue manifest
+        # 6. Boundary must be in this exact queue manifest
         if boundary_id not in set(manifest_boundary_ids):
             errors.append(
                 f"Row {line_num}: boundaryId={boundary_id} is not in queue {queue_id}"
             )
             continue
 
-        # 5. No duplicate boundary rows in this batch
+        # 7. No duplicate boundary rows in this batch
         if boundary_id in seen_boundary_ids_in_batch:
             errors.append(
                 f"Row {line_num}: duplicate boundaryId={boundary_id} in this batch"
@@ -266,22 +301,25 @@ def record_reviews(args: argparse.Namespace) -> None:
             continue
         seen_boundary_ids_in_batch.add(boundary_id)
 
-        # 6. sourceId, leftCueId, rightCueId must be consistent with boundaryId
+        # 8. sourceId, leftCueId, rightCueId must be consistent with boundaryId
         if not source_id or not left_cue_id or not right_cue_id:
             errors.append(f"Row {line_num}: missing sourceId, leftCueId, or rightCueId")
             continue
 
-        # 7. Verify immutable cue text and context match fixture
+        # 9. Verify immutable cue text and context match fixture
         fixture_entry = fixture_map.get(boundary_id)
         if fixture_entry:
             for field in ("leftRawText", "rightRawText", "leftNormalized", "rightNormalized",
                           "leftLines", "rightLines"):
                 csv_val = row.get(field, "").strip()
-                fixture_val = str(json.dumps(fixture_entry.get(field), ensure_ascii=False) if isinstance(fixture_entry.get(field), (list, dict))
-                                  else (fixture_entry.get(field) or ""))
-                # Compare after stripping JSON encoding
-                clean_csv = csv_val.strip('"')
-                if csv_val and clean_csv != fixture_val.strip('"'):
+                fixture_val_raw = fixture_entry.get(field)
+                if fixture_val_raw is None:
+                    fixture_str = ""
+                elif isinstance(fixture_val_raw, (list, dict)):
+                    fixture_str = json.dumps(fixture_val_raw, ensure_ascii=False)
+                else:
+                    fixture_str = str(fixture_val_raw)
+                if csv_val and csv_val != fixture_str and csv_val.strip('"') != fixture_str.strip('"'):
                     errors.append(
                         f"Row {line_num}: {field} modified for boundaryId={boundary_id}. "
                         f"CSV value does not match fixture."
@@ -291,7 +329,7 @@ def record_reviews(args: argparse.Namespace) -> None:
         if errors:
             continue
 
-        # 8. Label, confidence, reason
+        # 10. Label, confidence, reason
         if not label:
             errors.append(f"Row {line_num}: missing label for boundaryId={boundary_id}")
             continue
@@ -345,6 +383,15 @@ def record_reviews(args: argparse.Namespace) -> None:
 
         events.append(event)
 
+    # Verify CSV boundary IDs match manifest order
+    if errors:
+        pass  # Don't add order validation to accumulated row errors
+    elif csv_boundary_ids_in_order != manifest_boundary_ids:
+        errors.append(
+            f"CSV boundary IDs do not match manifest order. "
+            f"CSV: {csv_boundary_ids_in_order}, Manifest: {manifest_boundary_ids}"
+        )
+
     if errors:
         for err in errors:
             print(f"ERROR: {err}", file=sys.stderr)
@@ -387,16 +434,6 @@ def record_reviews(args: argparse.Namespace) -> None:
         if manifest_row_count and len(events) != manifest_row_count:
             print(
                 f"ERROR: CSV has {len(events)} rows but manifest declares {manifest_row_count}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        # Validate content hash against manifest
-        computed_hash = compute_queue_content_hash(rows)
-        if manifest_hash and computed_hash != manifest_hash:
-            print(
-                f"ERROR: Queue content hash mismatch. Manifest: {manifest_hash}, "
-                f"computed: {computed_hash}. Queue content may have been modified.",
                 file=sys.stderr,
             )
             sys.exit(1)
