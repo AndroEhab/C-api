@@ -1,0 +1,11 @@
+{
+  "manifestType": "Finalized Spanish held-out test silver artifact hashes",
+  "algorithm": "SHA-256",
+  "finalizedAt": "2026-07-28T16:39:36.169006Z",
+  "evaluationHadBegun": false,
+  "artifacts": {
+    "spanish_boundary_test_silver_labels.json": "3b81a7c1f2b8fdca29a7474d5b4cbf67086af308aa4d86f6d43b458b9cf1e0eb",
+    "spanish_boundary_test_silver_labels.csv": "b57278e724bdae5cd3b73973d18db1ff67eb159815c0dcde86ad825d06775ee4",
+    "spanish_boundary_test_silver_report.json": "966ccbe7d0695ab6a2f876c03fb7637b785a3056441d70d66b7daef9cb90a2f2"
+  }
+}

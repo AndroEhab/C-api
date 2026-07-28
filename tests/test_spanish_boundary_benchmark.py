@@ -1125,12 +1125,12 @@ class TestHeldOutProtection:
             f"Policy freeze file not found at {POLICY_FREEZE_PATH}"
         )
 
-    def test_policy_freeze_initial_state(self):
+    def test_policy_freeze_targets_task_8d(self):
         with open(POLICY_FREEZE_PATH, "r") as f:
             freeze: dict = json.load(f)
-        assert freeze.get("frozen") is False, "Policy must start unfrozen"
-        assert freeze.get("commitSha") is None
-        assert freeze.get("frozenAt") is None
+        assert freeze.get("frozen") is True, "Task 8E requires a frozen policy"
+        assert freeze.get("commitSha") == "dc9bdb69b80ab6d22037097dce429334ae09da2f"
+        assert is_valid_frozen_policy(freeze)
 
     def test_test_entries_permit_human_review(self, fixture):
         """Test entries may have labelOrigin distinct from unreviewed — 

@@ -158,6 +158,6 @@
     "reviewedJoin": 0,
     "reviewedBreak": 0,
     "needsAdjudicationCount": 0,
-    "isFrozen": false
+    "isFrozen": true
   }
 }

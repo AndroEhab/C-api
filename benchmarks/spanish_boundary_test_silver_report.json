@@ -1,0 +1,604 @@
+{
+  "reportType": "Spanish held-out test silver consensus annotation report",
+  "prominentLimitation": "SINGLE-MODEL CONSENSUS: the only available structured completion used the same openai-codex/gpt-5.6-sol model for both primary passes, verifier, and JOIN audit. Stateless blinding limits information leakage, but correlated model-family bias remains. These are silver labels, not human gold labels.",
+  "purpose": "Blind conservative LLM-consensus silver labels for one frozen held-out Spanish boundary evaluation; not human gold labels.",
+  "scope": {
+    "candidateFixture": "benchmarks/spanish_boundary_candidates.json",
+    "processedSplit": "test",
+    "testEntries": 74,
+    "developmentEntriesInspectedForTestLabels": 0,
+    "testEntriesEvaluatedAtReportFinalization": 0,
+    "officialCandidateFixtureModified": false,
+    "reviewLedgerWritten": false,
+    "developmentSilverArtifactsModified": false,
+    "productionBoundaryLogicModified": false,
+    "spanishSpecificRulesAdded": false,
+    "thresholdsTuned": false
+  },
+  "artifacts": {
+    "labelsJson": "benchmarks/spanish_boundary_test_silver_labels.json",
+    "labelsCsv": "benchmarks/spanish_boundary_test_silver_labels.csv",
+    "reportJson": "benchmarks/spanish_boundary_test_silver_report.json",
+    "hashManifest": "benchmarks/spanish_boundary_test_silver_hashes.json",
+    "canonicalOrder": "Candidate fixture order after filtering split == \"test\""
+  },
+  "modelConfiguration": {
+    "primaryModel": "openai-codex/gpt-5.6-sol",
+    "verifierModel": "openai-codex/gpt-5.6-sol",
+    "auditModel": "openai-codex/gpt-5.6-sol",
+    "completionInterface": "functions.eval.completion; stateless structured completion",
+    "promptVersion": "task8e-spanish-silver-v1",
+    "temperature": null,
+    "temperatureAvailability": "not exposed by the completion interface",
+    "pass1Order": "canonical test-fixture order",
+    "pass2Order": "deterministic shuffled order restored to canonical order before saving",
+    "pass2ShuffleAlgorithm": "Python random.Random(seed) / MT19937 over canonical indices",
+    "pass2ShuffleSeed": 20260730,
+    "pass2ShuffledBoundaryIds": [
+      "ted_tales_es:231:232",
+      "ted_tales_es:235:236",
+      "the_goat_life_es:562:563",
+      "ted_creativity_es:112:113",
+      "ted_tales_es:205:206",
+      "ted_tales_es:295:296",
+      "ted_creativity_es:111:112",
+      "ted_tales_es:245:246",
+      "ted_tales_es:311:312",
+      "the_goat_life_es:166:167",
+      "ted_creativity_es:225:226",
+      "ted_creativity_es:186:187",
+      "the_goat_life_es:373:374",
+      "ted_tales_es:322:323",
+      "ted_creativity_es:92:93",
+      "ted_creativity_es:158:159",
+      "ted_creativity_es:202:203",
+      "ted_tales_es:226:227",
+      "ted_creativity_es:332:333",
+      "ted_creativity_es:197:198",
+      "ted_creativity_es:221:222",
+      "ted_creativity_es:88:89",
+      "ted_tales_es:202:203",
+      "ted_creativity_es:104:105",
+      "ted_creativity_es:101:102",
+      "the_goat_life_es:80:81",
+      "the_goat_life_es:74:75",
+      "ted_creativity_es:153:154",
+      "ted_tales_es:264:265",
+      "the_goat_life_es:594:595",
+      "ted_tales_es:221:222",
+      "ted_creativity_es:107:108",
+      "the_goat_life_es:496:497",
+      "ted_creativity_es:105:106",
+      "the_goat_life_es:270:271",
+      "ted_creativity_es:95:96",
+      "ted_creativity_es:224:225",
+      "ted_creativity_es:331:332",
+      "ted_creativity_es:228:229",
+      "the_goat_life_es:410:411",
+      "ted_creativity_es:220:221",
+      "the_goat_life_es:354:355",
+      "the_goat_life_es:564:565",
+      "ted_creativity_es:213:214",
+      "ted_creativity_es:227:228",
+      "ted_tales_es:268:269",
+      "ted_tales_es:246:247",
+      "the_goat_life_es:205:206",
+      "the_goat_life_es:112:113",
+      "ted_creativity_es:193:194",
+      "ted_tales_es:256:257",
+      "ted_creativity_es:218:219",
+      "ted_creativity_es:176:177",
+      "ted_creativity_es:154:155",
+      "ted_creativity_es:212:213",
+      "ted_creativity_es:196:197",
+      "ted_tales_es:270:271",
+      "ted_creativity_es:178:179",
+      "ted_creativity_es:327:328",
+      "ted_tales_es:287:288",
+      "the_goat_life_es:556:557",
+      "the_goat_life_es:451:452",
+      "ted_tales_es:306:307",
+      "the_goat_life_es:170:171",
+      "the_goat_life_es:401:402",
+      "ted_tales_es:241:242",
+      "the_goat_life_es:597:598",
+      "ted_creativity_es:106:107",
+      "ted_tales_es:298:299",
+      "ted_creativity_es:103:104",
+      "ted_creativity_es:204:205",
+      "the_goat_life_es:544:545",
+      "ted_creativity_es:325:326",
+      "ted_creativity_es:211:212"
+    ],
+    "singleModelConsensus": true,
+    "correlatedBiasLimitation": true
+  },
+  "blindnessControls": {
+    "primaryPass1SawPriorLabelsOrPredictions": false,
+    "primaryPass2SawPass1Output": false,
+    "verifierSawPrimaryOutputs": false,
+    "finalAuditSawPrimaryOrVerifierOutputs": false,
+    "annotationPromptsSawNeutralPredictions": false,
+    "annotationPromptsSawSatProbabilities": false,
+    "annotationPromptsSawDevelopmentBaselineErrors": false,
+    "annotationPromptsSawDevelopmentFalseMergeExamples": false,
+    "annotationPromptsSawDevelopmentMissedJoinExamples": false,
+    "annotationPromptsSawExpectedModelBehavior": false,
+    "annotationPromptsSawExpectedTestLabelDistribution": false,
+    "samplingTagsAvailableOnlyAsMetadata": true,
+    "samplingTagsExplicitlyNotAnswers": true
+  },
+  "annotationDefinition": {
+    "JOIN": "Left and right form one grammatical sentence or one continuous unfinished utterance.",
+    "BREAK": "Right starts a separate sentence, utterance, response, speaker turn, caption, sound description, or discourse unit.",
+    "AMBIGUOUS": "Subtitle evidence does not support a reliable decision.",
+    "constraints": [
+      "Semantic relatedness alone is never sufficient for JOIN.",
+      "Question followed by answer is BREAK.",
+      "Speaker change is BREAK.",
+      "Standalone captions and audience reactions are normally BREAK.",
+      "Timing and capitalization are supporting evidence, not absolute rules.",
+      "False JOINs are substantially more harmful than missed JOINs."
+    ]
+  },
+  "synthesisRules": {
+    "joinRequiresBothPrimariesJoin": true,
+    "joinRejectsLowPrimaryConfidence": true,
+    "joinRequiresVerifierJoin": true,
+    "joinRequiresVerifierHighOrMedium": true,
+    "joinRequiresValidReconstruction": true,
+    "joinRejectsSpeakerChange": true,
+    "joinRejectsQuestionAnswer": true,
+    "joinRejectsCaptionDialogueMerge": true,
+    "primaryDisagreementBecomesAmbiguous": true,
+    "verifierDisagreementNormallyBecomesAmbiguous": true,
+    "finalLowConfidenceBecomesAmbiguous": true,
+    "breakAndAmbiguousReconstructionIsNull": true
+  },
+  "qualityStatistics": {
+    "totalTestEntries": 74,
+    "pass1LabelCounts": {
+      "JOIN": 16,
+      "BREAK": 58,
+      "AMBIGUOUS": 0
+    },
+    "pass2LabelCounts": {
+      "JOIN": 15,
+      "BREAK": 57,
+      "AMBIGUOUS": 2
+    },
+    "primaryAgreementCount": 72,
+    "primaryDisagreementCount": 2,
+    "primaryAgreementRate": 0.972972972972973,
+    "primaryCohenKappa": 0.9233160621761659,
+    "primaryCohenKappaCalculation": {
+      "observedAgreement": 0.972972972972973,
+      "chanceAgreementFromPassMarginals": 0.6475529583637692,
+      "formula": "(observedAgreement - chanceAgreement) / (1 - chanceAgreement)"
+    },
+    "agreementIsNotAccuracy": true,
+    "verifierReviewedCount": 74,
+    "verifierConsensusComparableCount": 72,
+    "verifierAgreementCount": 71,
+    "verifierAgreementRate": 0.9861111111111112,
+    "verifierAgreementDefinition": "Verifier label equals the agreed primary label; primary-disagreement cases excluded from denominator.",
+    "finalLabelCounts": {
+      "JOIN": 13,
+      "BREAK": 57,
+      "AMBIGUOUS": 4
+    },
+    "finalConfidenceCounts": {
+      "high": 62,
+      "medium": 10,
+      "low": 2
+    },
+    "needsFutureHumanReviewCount": 12,
+    "countsBySource": {
+      "ted_creativity_es": {
+        "total": 36,
+        "JOIN": 9,
+        "BREAK": 25,
+        "AMBIGUOUS": 2
+      },
+      "ted_tales_es": {
+        "total": 19,
+        "JOIN": 4,
+        "BREAK": 15,
+        "AMBIGUOUS": 0
+      },
+      "the_goat_life_es": {
+        "total": 19,
+        "JOIN": 0,
+        "BREAK": 17,
+        "AMBIGUOUS": 2
+      }
+    }
+  },
+  "primaryDisagreements": [
+    {
+      "boundaryId": "the_goat_life_es:373:374",
+      "leftCue": "Solía hacer sopa con él.",
+      "rightCue": "Alimentación adecuada durante este periodo\nNecesidad.",
+      "primaryPass1": {
+        "boundaryId": "the_goat_life_es:373:374",
+        "label": "BREAK",
+        "confidence": "medium",
+        "reason": "Pese a la traducción defectuosa de la derecha, la izquierda es completa y la nueva frase expresa otro punto."
+      },
+      "primaryPass2": {
+        "boundaryId": "the_goat_life_es:373:374",
+        "label": "AMBIGUOUS",
+        "confidence": "low",
+        "reason": "La derecha está gravemente degradada y podría ser una nueva intervención o una continuación mal traducida; la estructura no es recuperable con fiabilidad."
+      },
+      "verifier": {
+        "boundaryId": "the_goat_life_es:373:374",
+        "label": "BREAK",
+        "confidence": "medium",
+        "reason": "La izquierda es una oración completa; la derecha es una unidad nueva y muy mal traducida, pero no ofrece una continuación gramatical plausible de «con él».",
+        "reconstructedTextCandidate": null,
+        "validReconstruction": false,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": true,
+        "adversarialFlags": [
+          "severe-translation-corruption",
+          "independent-utterance"
+        ]
+      },
+      "synthesis": {
+        "boundaryId": "the_goat_life_es:373:374",
+        "label": "AMBIGUOUS",
+        "confidence": "low",
+        "reason": "Conservative synthesis: primary disagreement; low confidence",
+        "reconstructedText": null,
+        "disqualifiers": [
+          "primary disagreement",
+          "low confidence"
+        ]
+      },
+      "kind": "primary disagreement"
+    },
+    {
+      "boundaryId": "the_goat_life_es:562:563",
+      "leftCue": "También.",
+      "rightCue": "...enviar a nuestro hijo a una buena escuela.",
+      "primaryPass1": {
+        "boundaryId": "the_goat_life_es:562:563",
+        "label": "JOIN",
+        "confidence": "medium",
+        "reason": "La elipsis inicial de la derecha señala la continuación del pensamiento aditivo empezado con «También»."
+      },
+      "primaryPass2": {
+        "boundaryId": "the_goat_life_es:562:563",
+        "label": "AMBIGUOUS",
+        "confidence": "low",
+        "reason": "La elipsis sugiere continuación de una lista, pero «También.» aparece cerrado y la traducción fragmentaria no permite reconstruir con seguridad la sintaxis."
+      },
+      "verifier": {
+        "boundaryId": "the_goat_life_es:562:563",
+        "label": "AMBIGUOUS",
+        "confidence": "medium",
+        "reason": "«También.» aparece cerrado, mientras la derecha empieza con elipsis y un infinitivo huérfano; puede ser material omitido o una continuación corrupta, sin reconstrucción fiable.",
+        "reconstructedTextCandidate": null,
+        "validReconstruction": false,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": true,
+        "adversarialFlags": [
+          "ellipsis",
+          "missing-material",
+          "translation-corruption"
+        ]
+      },
+      "synthesis": {
+        "boundaryId": "the_goat_life_es:562:563",
+        "label": "AMBIGUOUS",
+        "confidence": "low",
+        "reason": "Conservative synthesis: primary disagreement; low confidence",
+        "reconstructedText": null,
+        "disqualifiers": [
+          "primary disagreement",
+          "low confidence"
+        ]
+      },
+      "kind": "primary disagreement"
+    }
+  ],
+  "verifierDisagreements": [
+    {
+      "boundaryId": "ted_creativity_es:212:213",
+      "leftCue": "es producir profesores universitarios.",
+      "rightCue": "¿No?",
+      "primaryPass1": {
+        "boundaryId": "ted_creativity_es:212:213",
+        "label": "JOIN",
+        "confidence": "medium",
+        "reason": "«¿No?» funciona como coletilla interrogativa ligada directamente a la afirmación precedente."
+      },
+      "primaryPass2": {
+        "boundaryId": "ted_creativity_es:212:213",
+        "label": "JOIN",
+        "confidence": "medium",
+        "reason": "«¿No?» funciona como coletilla confirmativa ligada a la afirmación inmediatamente anterior."
+      },
+      "verifier": {
+        "boundaryId": "ted_creativity_es:212:213",
+        "label": "BREAK",
+        "confidence": "high",
+        "reason": "La afirmación ya está cerrada y «¿No?» funciona como una pregunta confirmatoria autónoma.",
+        "reconstructedTextCandidate": null,
+        "validReconstruction": false,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false,
+        "adversarialFlags": [
+          "standalone-tag-question"
+        ]
+      },
+      "synthesis": {
+        "boundaryId": "ted_creativity_es:212:213",
+        "label": "AMBIGUOUS",
+        "confidence": "medium",
+        "reason": "Conservative synthesis: verifier disagreement",
+        "reconstructedText": null,
+        "disqualifiers": [
+          "verifier disagreement"
+        ]
+      },
+      "kind": "verifier disagreement"
+    }
+  ],
+  "finalJoinAudit": {
+    "auditedCount": 14,
+    "keptJOINCount": 13,
+    "downgradedToAMBIGUOUSCount": 1,
+    "changes": [
+      {
+        "boundaryId": "ted_creativity_es:154:155",
+        "from": "JOIN",
+        "to": "AMBIGUOUS",
+        "auditConfidence": "high",
+        "reason": "The left cue is a narrative setup and the right cue is an enacted command attributed to the father. The evidence permits a separate quoted utterance or character-voice transition, so a safe JOIN is not supported."
+      }
+    ],
+    "allAuditDecisions": [
+      {
+        "boundaryId": "ted_creativity_es:95:96",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The colon introduces the quoted slogan carried on the agents' T-shirts; the right cue completes the same sentence rather than beginning a new spoken turn.",
+        "reconstructedTextCandidate": "Llenamos el lugar de agentes\nen camisetas: \"¡James Robinson ES José!\"",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:101:102",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The causal clause beginning with «porque» directly continues «creo que no siguieron el orden» within the same unfinished utterance.",
+        "reconstructedTextCandidate": "y creo que no siguieron el orden, porque hablamos después\ncon el niño y le dijimos,",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:105:106",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The prepositional phrase «con paños de cocina en las cabezas» modifies the preceding appositional description «niños de 4 años» and is not an independent discourse unit.",
+        "reconstructedTextCandidate": "Los tres niños entraron,\nniños de 4 años con paños de cocina\nen las cabezas,",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:106:107",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The comma after the parenthetical description leads into the next predicate, «pusieron estas cajas», whose subject remains «Los tres niños» from the preceding context.",
+        "reconstructedTextCandidate": "con paños de cocina\nen las cabezas, pusieron estas cajas en el suelo,",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:107:108",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The conjunction «y» coordinates «dijo» with the preceding predicate «pusieron» in the same narrated sentence.",
+        "reconstructedTextCandidate": "pusieron estas cajas en el suelo, y el primer niño dijo, \"Les traigo oro\".",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:154:155",
+        "action": "DOWNGRADE_AMBIGUOUS",
+        "confidence": "high",
+        "reason": "The left cue is a narrative setup and the right cue is an enacted command attributed to the father. The evidence permits a separate quoted utterance or character-voice transition, so a safe JOIN is not supported.",
+        "reconstructedTextCandidate": null,
+        "validReconstruction": false,
+        "speakerChange": true,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:178:179",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The preceding context supplies «Pero algo te sorprende»; the left cue completes its temporal clause and the colon introduces the specific surprising fact in the right cue.",
+        "reconstructedTextCandidate": "cuando te mudas a los Estados Unidos\ny viajas por el mundo: todos los sistemas educativos del mundo\ntienen la misma jerarquía de materias.",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:193:194",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "«Pero también la danza» is the contrastive continuation of «Las matemáticas son muy importantes» and cannot stand here as a complete independent sentence without an elided predicate.",
+        "reconstructedTextCandidate": "Las matemáticas son muy importantes, pero también la danza.",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:211:212",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The right cue supplies the copula and predicate for the subject spanning the prior context: «el propósito de la educación pública en todo el mundo es…».",
+        "reconstructedTextCandidate": "en todo el mundo es producir profesores universitarios.",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_creativity_es:325:326",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The right cue begins the quoted philosophical question introduced by the left cue and remains unfinished until the following cue; it is an embedded quotation, not an answer or separate speaker turn.",
+        "reconstructedTextCandidate": "Conocen esa vieja pregunta filosófica, \"si un árbol cae en el bosque\ny nadie lo escucha,",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_tales_es:202:203",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "«Que» introduces the complement required by «les puedo asegurar», unmistakably continuing the same sentence.",
+        "reconstructedTextCandidate": "El feminismo nunca ha sido sexy, pero les puedo asegurar que nunca me ha impedido coquetear,",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_tales_es:221:222",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The relative clause «que han esperado…» directly modifies «una fila de mujeres» in the left cue.",
+        "reconstructedTextCandidate": "Afuera hay una fila de mujeres que han esperado varias horas para ser tratadas.",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_tales_es:246:247",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The left cue is an «Aunque» subordinate clause, and the right cue supplies its required main clause.",
+        "reconstructedTextCandidate": "Aunque las mujeres realizan dos tercios del trabajo en el mundo, son dueñas de menos del 1% de los bienes del mundo.",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      },
+      {
+        "boundaryId": "ted_tales_es:256:257",
+        "action": "KEEP_JOIN",
+        "confidence": "high",
+        "reason": "The left cue is a conditional protasis beginning with «Si», and the right cue is its main-clause consequence. The timing gap does not override the decisive syntax.",
+        "reconstructedTextCandidate": "Si una mujer está empoderada, sus hijos y su familia van a estar mejor.",
+        "validReconstruction": true,
+        "speakerChange": false,
+        "questionAnswerStructure": false,
+        "captionDialogueMerge": false,
+        "corruptionConcern": false
+      }
+    ]
+  },
+  "corruptionConcerns": [
+    {
+      "boundaryId": "the_goat_life_es:74:75",
+      "label": "BREAK",
+      "confidence": "medium",
+      "reason": "La fórmula religiosa queda como intervención acabada o suspendida; «¡Es inútil!» es una exclamación reactiva independiente, probablemente de otro hablante."
+    },
+    {
+      "boundaryId": "the_goat_life_es:166:167",
+      "label": "BREAK",
+      "confidence": "high",
+      "reason": "La derecha contiene dos líneas marcadas como intervenciones de diálogo y al menos un cambio explícito de hablante."
+    },
+    {
+      "boundaryId": "the_goat_life_es:270:271",
+      "label": "BREAK",
+      "confidence": "high",
+      "reason": "«No, gracias» es el rechazo de otro hablante a la oferta de cigarrillo; no completa la explicación de procedencia."
+    },
+    {
+      "boundaryId": "the_goat_life_es:373:374",
+      "label": "BREAK",
+      "confidence": "medium",
+      "reason": "La izquierda es una oración completa; la derecha es una unidad nueva y muy mal traducida, pero no ofrece una continuación gramatical plausible de «con él»."
+    },
+    {
+      "boundaryId": "the_goat_life_es:401:402",
+      "label": "BREAK",
+      "confidence": "medium",
+      "reason": "Son respuestas nominales separadas —idioma y nombre— dentro de un intercambio; no forman una construcción gramatical conjunta fiable."
+    },
+    {
+      "boundaryId": "the_goat_life_es:562:563",
+      "label": "AMBIGUOUS",
+      "confidence": "medium",
+      "reason": "«También.» aparece cerrado, mientras la derecha empieza con elipsis y un infinitivo huérfano; puede ser material omitido o una continuación corrupta, sin reconstrucción fiable."
+    },
+    {
+      "boundaryId": "the_goat_life_es:564:565",
+      "label": "BREAK",
+      "confidence": "high",
+      "reason": "La declaración «Estos son los únicos» termina; la derecha inicia una pregunta completa sobre tener un hijo."
+    }
+  ],
+  "validation": {
+    "validatedAt": "2026-07-28T16:39:36.169006Z",
+    "exactly74TestBoundaries": true,
+    "everyTestBoundaryExactlyOnce": true,
+    "noDevelopmentBoundary": true,
+    "labelsAndConfidencesValid": true,
+    "everySilverLabelHasReason": true,
+    "everyJoinSourcePreserving": true,
+    "nonJoinReconstructionNull": true,
+    "everyPrimaryDisagreementAmbiguous": true,
+    "officialFixtureGoldFieldsNull": true,
+    "developmentSilverHashes": {
+      "spanish_boundary_dev_silver_labels.json": "2284b5e35ad7de7e4ea02c5bfec1ebd0d29fa6ac0aabe81a3bafef61955838ca",
+      "spanish_boundary_dev_silver_labels.csv": "33b4b5ab5e1e03600d707cae6c26a23e7ac041c39b77da6625e52acc037fb843",
+      "spanish_boundary_dev_silver_report.json": "b6bc3d0e5843f17e1f05f0428a827ec8a1eb31dd59dce558bf53e0eb3d36a2cc"
+    },
+    "reviewLedgerEmpty": true,
+    "policyFreezeValid": true,
+    "frozenPolicyTargetSha": "dc9bdb69b80ab6d22037097dce429334ae09da2f",
+    "noTestPredictionsOrMetricsGenerated": true
+  }
+}
