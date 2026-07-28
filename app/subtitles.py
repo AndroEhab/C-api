@@ -30,6 +30,7 @@ class BoundaryPolicyConfig:
     large_model_join_max_probability: float = 0.05
     continuation_override_max_probability: float = 0.95
     min_continuation_score: int = 3
+    dialogue_dash_continuation_penalty: int = 2
 
     def __post_init__(self) -> None:
         for name in ("normal_gap_max_ms", "medium_gap_max_ms", "extreme_gap_ms"):
@@ -67,21 +68,19 @@ class BoundaryPolicyConfig:
             or self.min_continuation_score < 1
         ):
             raise ValueError("min_continuation_score must be a positive integer")
+        if (
+            isinstance(self.dialogue_dash_continuation_penalty, bool)
+            or not isinstance(self.dialogue_dash_continuation_penalty, int)
+            or self.dialogue_dash_continuation_penalty < 0
+        ):
+            raise ValueError("dialogue_dash_continuation_penalty must be a non-negative integer")
 
 
 DEFAULT_BOUNDARY_POLICY_CONFIG = BoundaryPolicyConfig()
 _LOGGER = logging.getLogger(__name__)
 _STRONG_SENTENCE_END_RE = re.compile(r"""[.!?…]+(?:["'’”»)\]}]+)?$""")
 _DIALOGUE_DASH_RE = re.compile(r"^\s*(?:--?|[–—]|>>)\s+")
-_VOICE_TAG_RE = re.compile(
-    r"^\s*(?:<v(?:\s+[^>]*)?>|\[[A-Z][A-Z0-9 ._-]{1,30}\]\s*|"
-    r"[A-Z][A-Z0-9 ._-]{1,30}:)"
-)
-_FORMATTING_TAG_RE = re.compile(r"</?[^>]+>|\{\\[^}]+\}")
-_VOICE_TAG_EXTRACT_RE = re.compile(r"^\s*<v\s+(\S[^>]*)>")
-_BRACKET_SPEAKER_RE = re.compile(r"^\s*\[([A-Z][A-Z0-9 ._-]{1,30})\]\s*")
-_LABEL_SPEAKER_RE = re.compile(r"^\s*([A-Z][A-Z0-9 ._-]{1,30}):(?:\s|$)")
-_WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)?")
+_WORD_RE = re.compile(r"[A-Za-z]+(?:['''][A-Za-z]+)?")
 _CUE_ID_SUFFIX_RE = re.compile(r"^(?P<prefix>.*?)(?P<number>\d+)$")
 _SUBORDINATE_STARTS = frozenset(
     {"although", "because", "if", "since", "though", "unless", "when", "while"}
@@ -93,6 +92,18 @@ _CONTINUATION_PRONOUNS = frozenset(
     {"her", "his", "its", "my", "our", "their", "the", "this", "that", "your"}
 )
 _WH_STARTS = frozenset({"how", "what", "when", "where", "which", "who", "whom", "whose", "why"})
+_FINITE_VERB_RE = re.compile(
+    r"\b(?:[A-Za-z]{2,}(?:s|es|ed|ing|en)?)\b(?:\s+(?:the|a|an|my|your|his|her|its|our|their|this|that|these|those)\s+[A-Za-z]+)?\s+(?:is|are|was|were|has|have|had|will|would|can|could|shall|should|may|might|do|does|did)\b|\b[A-Za-z]+(?:s|es|ed|ing|en)?\b",
+    re.IGNORECASE,
+)
+_VOICE_TAG_RE = re.compile(
+    r"^\s*(?:<v(?:\s+[^>]*)?>|\[[A-Z][A-Z0-9 ._-]{1,30}\]\s*|"
+    r"[A-Z][A-Z0-9 ._-]{1,30}:)"
+)
+_FORMATTING_TAG_RE = re.compile(r"</?[^>]+>|\{\\[^}]+\}")
+_VOICE_TAG_EXTRACT_RE = re.compile(r"^\s*<v\s+(\S[^>]*)>")
+_BRACKET_SPEAKER_RE = re.compile(r"^\s*\[([A-Z][A-Z0-9 ._-]{1,30})\]\s*")
+_LABEL_SPEAKER_RE = re.compile(r"^\s*([A-Z][A-Z0-9 ._-]{1,30}):(?:\s|$)")
 _INCOMPLETE_ENDINGS = frozenset(
     {"a", "an", "and", "as", "at", "because", "but", "for", "if", "of", "or", "than", "to", "with"}
 )
@@ -219,7 +230,9 @@ def _detect_cue_speakers(
 
 
 def _starts_new_sentence(text: str) -> bool:
-    if _has_speaker_marker(text):
+    # Only explicit speaker labels (voice tags, bracket names, colon labels)
+    # are treated as new-sentence starts — anonymous dialogue dashes are not.
+    if _VOICE_TAG_RE.match(text):
         return True
     first_letter = re.search(r"[A-Za-z]", _visible_text(text))
     return first_letter is not None and first_letter.group(0).isupper()
@@ -376,12 +389,9 @@ class ReconstructedSentencePart:
     speaker_markers: tuple[str, ...] = ()
     contains_multiple_speakers: bool = False
 
-
 class InvalidGroupingResponse(ValueError):
     """Raised when a model response cannot be mapped to the original cues."""
 
-
-BoundaryDecisionValue = Literal["join", "break", "uncertain"]
 
 
 class BoundaryEvidence(TypedDict):
@@ -389,7 +399,8 @@ class BoundaryEvidence(TypedDict):
 
     leftSegmentId: str
     rightSegmentId: str
-    boundaryProbability: float | None
+    modelProbability: float | None
+
 
 
 class BoundaryDecision(TypedDict):
@@ -479,12 +490,15 @@ def parse_srt(content: str) -> list[SubtitleSegment]:
         text = " ".join(line.strip() for line in lines[timing_line_index + 1 :] if line.strip())
         if not text:
             raise ValueError(f"SRT cue {segment_id!r} has no text")
-        # Preserve original text lines and raw representation
-        original_text_lines = [
-            line.strip() for line in lines[timing_line_index + 1 :]
-        ]
-        raw_text = "\n".join(original_text_lines)
-        speaker_info = _detect_cue_speakers(original_text_lines, text)
+        # Preserve truly original source lines for raw_text and lines.
+        # Newline normalization: \\r is stripped for platform-independent splitting,
+        # but leading/trailing whitespace within a line is untouched so that
+        # raw_text and lines reflect the exact source content.
+        # normalized text (= " ".join(stripped lines)) is used separately for
+        # model input and display joining.
+        not_stripped_lines = lines[timing_line_index + 1 :]
+        raw_text = "\n".join(not_stripped_lines)
+        speaker_info = _detect_cue_speakers(not_stripped_lines, text)
         segments.append(SubtitleSegment(
             segment_id,
             text,
@@ -492,7 +506,7 @@ def parse_srt(content: str) -> list[SubtitleSegment]:
             end_ms,
             speaker=speaker_info["speaker"],
             raw_text=raw_text,
-            lines=tuple(original_text_lines),
+            lines=tuple(not_stripped_lines),
             speaker_markers=speaker_info["speaker_markers"],
             contains_multiple_speakers=speaker_info["contains_multiple_speakers"],
         ))
@@ -757,7 +771,7 @@ def _boundary_hard_break_reason(
     config: BoundaryPolicyConfig,
 ) -> str | None:
     # Different explicit speakers are always a hard break.
-    if left.speaker != right.speaker and (left.speaker is not None or right.speaker is not None):
+    if left.speaker is not None and right.speaker is not None and left.speaker != right.speaker:
         return "adjacent cues have different explicit speakers"
     # A cue with multiple speakers makes cross-cue merging unsafe.
     if left.contains_multiple_speakers:
@@ -767,11 +781,6 @@ def _boundary_hard_break_reason(
     # Next cue introduces an explicit speaker when left has none.
     if right.speaker is not None and left.speaker is None:
         return "right cue introduces a new explicit speaker"
-    if _has_speaker_marker(right.text) and not _has_speaker_marker(left.text):
-        return "next cue has a dialogue marker"
-    # Both sides have dialogue markers — likely a turn, protect it.
-    if _has_speaker_marker(left.text) and _has_speaker_marker(right.text):
-        return "both cues have dialogue markers, likely a turn boundary"
     source_order_reason = _source_cue_order_reason(left, right)
     if source_order_reason is not None:
         return source_order_reason
@@ -810,6 +819,13 @@ def _soft_boundary_decision(
 ) -> tuple[BoundaryDecisionValue, str]:
     gap_band = _gap_band(gap_ms, config)
     continuation_score = _continuation_structure_score(left.text, right.text)
+    # Apply dialogue dash penalty — anonymous dashes are strong structural break
+    # evidence but allow very strong grammatical/model continuation to remain eligible.
+    has_dash_marker = any(m == "-" for m in left.speaker_markers) or any(
+        m == "-" for m in right.speaker_markers
+    )
+    if config.dialogue_dash_continuation_penalty and has_dash_marker:
+        continuation_score = max(0, continuation_score - config.dialogue_dash_continuation_penalty)
     strong_continuation = continuation_score >= config.min_continuation_score
     independent_statements = _looks_like_independent_statements(
         left.text,
@@ -849,6 +865,17 @@ def _soft_boundary_decision(
     if model_probability > threshold:
         return "break", "model probability favors a sentence boundary"
     return "uncertain", "soft boundary evidence is exactly ambiguous"
+
+
+class BoundaryScoringApi(Protocol):
+    """Protocol for boundary probability scoring services.
+
+    Either ``score_boundaries`` or ``windowed_score_boundaries`` must be callable.
+    """
+
+    def score_boundaries(self, texts: Sequence[str]) -> Any: ...
+
+    def windowed_score_boundaries(self, texts: Sequence[str]) -> Any: ...
 
 
 class SubtitleSentenceReconstructor:

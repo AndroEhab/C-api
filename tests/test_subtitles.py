@@ -457,9 +457,10 @@ def test_separate_model_breaks_remain_separate(texts: list[str]) -> None:
 
 @pytest.mark.parametrize(
     "second_text",
-    ["- I'll go.", "<v Mingzhu>I'll go.", "MINGZHU: I'll go."],
+    ["<v Mingzhu>I'll go.", "MINGZHU: I'll go."],
 )
-def test_dialogue_markers_protect_probable_speaker_boundary(second_text: str) -> None:
+def test_named_speaker_markers_protect_boundary(second_text: str) -> None:
+    """Explicit named speaker markers protect a boundary from forced joins."""
     api = FakeGroupingApi({"groups": [["a", "b"]]}, [])
     cues = [
         segment("a", "Wait here.", 0, 500),
@@ -516,8 +517,7 @@ def test_boundary_policy_config_uses_calibrated_gap_bands() -> None:
 @pytest.mark.parametrize(
     ("left", "right", "speaker", "expected_reason"),
     [
-        ("Hello.", "Hi.", ("Alice", "Bob"), "different explicit speakers"),
-        ("Wait here.", "- I'll go.", (None, None), "next cue has a dialogue marker"),
+        ("Wait here.", "Hi.", (None, "Bob"), "right cue introduces a new explicit speaker"),
         ("her", "'ve taken care.", (None, None), "joining would corrupt text"),
     ],
 )
@@ -850,12 +850,116 @@ def test_boundary_protected_by_structural_speaker_evidence() -> None:
     assert decisions[0]["decision"] == "break"
     assert "explicit speaker" in decisions[0]["reason"]
 
-
-def test_both_dialogue_markers_protect_boundary() -> None:
-    """Both cues having dialogue markers protects the boundary even with no named speaker."""
+def test_alice_to_bob_is_hard_break() -> None:
+    """Alice -> Bob: different explicit speakers is a hard BREAK."""
     api = FakeBoundaryApi([0.0], [])
-    left = segment("a", "- Hello.", 0, 500)
-    right = segment("b", "- Hi!", 500, 1000)
-    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries([left, right])
+    cues = [
+        segment("a", "I need you.", 0, 500, speaker="Alice"),
+        segment("b", "To listen carefully.", 500, 1000, speaker="Bob"),
+    ]
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
     assert decisions[0]["decision"] == "break"
-    assert "both cues have dialogue markers" in decisions[0]["reason"]
+    assert "different explicit speakers" in decisions[0]["reason"]
+
+
+def test_alice_to_alice_is_normal_policy() -> None:
+    """Alice -> Alice: same explicit speaker, normal policy applies."""
+    api = FakeBoundaryApi([0.9], [])
+    cues = [
+        segment("a", "I need you.", 0, 500, speaker="Alice"),
+        segment("b", "to listen carefully.", 500, 1000, speaker="Alice"),
+    ]
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
+    assert decisions[0]["decision"] != "break" or "different explicit speakers" not in decisions[0]["reason"]
+
+
+def test_alice_to_unknown_is_normal_policy() -> None:
+    """Alice -> unknown: explicit speaker then unmarked cue is NOT a confirmed change."""
+    api = FakeBoundaryApi([0.1], [])
+    cues = [
+        segment("a", "I need you.", 0, 500, speaker="Alice"),
+        segment("b", "to listen carefully.", 500, 1000),
+    ]
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
+    # Not a hard break for different explicit speakers
+    assert "different explicit speakers" not in decisions[0]["reason"]
+    assert decisions[0]["decision"] in ("join", "break", "uncertain")
+
+
+def test_unknown_to_alice_is_structural_evidence() -> None:
+    """unknown -> Alice: structural speaker introduction, not 'different explicit identities'."""
+    api = FakeBoundaryApi([0.0], [])
+    cues = [
+        segment("a", "Listen carefully.", 0, 500),
+        segment("b", "I need you.", 500, 1000, speaker="Alice"),
+    ]
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries(cues)
+    # The reason should describe a speaker introduction, not "different explicit speakers"
+    assert decisions[0]["decision"] == "break"
+    assert "introduces a new explicit speaker" in decisions[0]["reason"]
+    assert "different explicit speakers" not in decisions[0]["reason"]
+
+
+def test_dash_join_eligible() -> None:
+    """Dash markers allow join when grammatical continuation is strong."""
+    api = FakeBoundaryApi([0.0], [])
+    left = segment("a", "- I never thought", 0, 500)
+    right = segment("b", "- we would end up here.", 500, 1000)
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries([left, right])
+    # Model says strong join (0.0) + continuation from "I never thought" -> "we would" (lowercase)
+    # should be eligible for join
+    assert decisions[0]["decision"] in ("join",)
+
+
+def test_dash_break_confirmed() -> None:
+    """Dash markers break when sentences are grammatically independent."""
+    api = FakeBoundaryApi([0.0], [])
+    left = segment("a", "- Where are you going?", 0, 500)
+    right = segment("b", "- Home.", 500, 1000)
+    decisions = SubtitleSentenceReconstructor(api).evaluate_boundaries([left, right])
+    # "Where are you going?" is terminal, "Home." is a complete sentence -> break
+    assert decisions[0]["decision"] == "break"
+
+
+def test_srt_round_trip_via_api_preserves_fields() -> None:
+    """SRT/parser-derived SubtitleSegment -> reconstruction -> API response preserves fields."""
+    from app.main import SubtitleSegmentRequest
+    srt = (
+        "1\n00:00:10,000 --> 00:00:12,500\n"
+        "ALICE: I need you\n"
+        "to listen carefully.\n\n"
+        "2\n00:00:13,000 --> 00:00:14,000\n"
+        "  <i>Hello</i>  \n"
+    )
+    cues = parse_srt(srt)
+    payload = {
+        "segments": [
+            {
+                "segmentId": cue.segment_id,
+                "text": cue.text,
+                "startMs": cue.start_ms,
+                "endMs": cue.end_ms,
+                "rawText": cue.raw_text,
+                "lines": list(cue.lines),
+                "speaker": cue.speaker,
+                "speakerMarkers": list(cue.speaker_markers),
+                "containsMultipleSpeakers": cue.contains_multiple_speakers,
+            }
+            for cue in cues
+        ]
+    }
+    # Verify SubtitleSegmentRequest round-trips without errors
+    for segment_data in payload["segments"]:
+        req = SubtitleSegmentRequest(**segment_data)
+        domain = req.to_domain()
+        assert domain.segment_id == segment_data["segmentId"]
+        assert domain.raw_text == segment_data["rawText"]
+        assert list(domain.lines) == segment_data["lines"]
+        assert domain.speaker == segment_data["speaker"]
+        assert list(domain.speaker_markers) == segment_data["speakerMarkers"]
+        assert domain.contains_multiple_speakers == segment_data["containsMultipleSpeakers"]
+        # raw_text preserves leading spaces (content.strip() in parse_srt
+        # removes trailing whitespace from the whole SRT before block splitting)
+        if "Hello" in domain.text:
+            assert "  <i>Hello</i>" in domain.raw_text
+            assert domain.text == "<i>Hello</i>"

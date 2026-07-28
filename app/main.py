@@ -16,6 +16,7 @@ from .model import (
 
 from .sat import SaTSentenceReconstructor, SaTUnavailableError
 from .subtitles import (
+    _detect_cue_speakers,
     SubtitleSegment,
     SubtitleSentenceReconstructor,
 )
@@ -86,6 +87,53 @@ class SubtitleSegmentRequest(BaseModel):
     def require_valid_timing(self) -> "SubtitleSegmentRequest":
         if self.end_ms < self.start_ms:
             raise ValueError("endMs must be greater than or equal to startMs")
+        return self
+
+    @model_validator(mode="after")
+    def validate_structural_fields(self) -> "SubtitleSegmentRequest":
+        """Validate and derive speaker metadata when lines are provided.
+
+        When the client provides ``lines``, derive ``speaker``,
+        ``speaker_markers``, and ``contains_multiple_speakers`` server-side
+        so that contradictory client-supplied values are caught early.
+        """
+        text_lines = list(self.lines) if self.lines else []
+        if not text_lines:
+            return self
+
+        # Reject contradictory raw_text / lines representations.
+        if self.raw_text is not None:
+            expected_raw = "\n".join(text_lines)
+            if self.raw_text != expected_raw:
+                raise ValueError(
+                    "rawText must equal '\\n'.join(lines); got "
+                    f"{self.raw_text!r} vs {expected_raw!r}"
+                )
+
+        # Derive speaker metadata server-side from lines.
+        derived = _detect_cue_speakers(text_lines, self.text)
+        derived_speaker: str | None = derived["speaker"]
+        derived_markers: tuple[str, ...] = derived["speaker_markers"]
+        derived_multiple: bool = derived["contains_multiple_speakers"]
+
+        # If client provided a speaker, it must match derivation.
+        if self.speaker is not None and derived_speaker is not None:
+            if self.speaker != derived_speaker:
+                raise ValueError(
+                    f"speaker {self.speaker!r} contradicts line-derived "
+                    f"speaker {derived_speaker!r}"
+                )
+        # Prefer derived values when the client left them at default.
+        if self.speaker is None and derived_speaker is not None:
+            self.speaker = derived_speaker
+        if not self.speaker_markers and derived_markers:
+            self.speaker_markers = list(derived_markers)
+        # Do not blindly trust client-supplied containsMultipleSpeakers.
+        if derived_multiple and not self.contains_multiple_speakers:
+            self.contains_multiple_speakers = True
+        elif not derived_multiple and self.contains_multiple_speakers:
+            self.contains_multiple_speakers = False
+
         return self
 
     def to_domain(self) -> SubtitleSegment:
